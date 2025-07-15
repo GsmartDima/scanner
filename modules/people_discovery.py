@@ -1,7 +1,7 @@
 """
 People Discovery Module
 Discovers people, email addresses, and checks for data breaches
-Enhanced with executive information gathering and advanced OSINT techniques
+Enhanced with realistic data validation and improved OSINT techniques
 """
 import asyncio
 import re
@@ -19,85 +19,223 @@ logger = logging.getLogger(__name__)
 
 
 class PeopleDiscoverer:
-    """Discovers people and their information from web assets with enhanced OSINT capabilities"""
+    """Discovers people and their information from web assets with enhanced validation"""
     
     def __init__(self):
         self.http_timeout = 15
         self.max_pages_per_site = 5
         
+        # Common first names for validation (subset of real names)
+        self.common_first_names = {
+            'james', 'john', 'robert', 'michael', 'william', 'david', 'richard', 'charles',
+            'joseph', 'thomas', 'christopher', 'daniel', 'paul', 'mark', 'donald', 'steven',
+            'andrew', 'kenneth', 'joshua', 'kevin', 'brian', 'george', 'timothy', 'ronald',
+            'jason', 'edward', 'jeffrey', 'ryan', 'jacob', 'gary', 'nicholas', 'eric',
+            'jonathan', 'stephen', 'larry', 'justin', 'scott', 'brandon', 'benjamin',
+            'mary', 'patricia', 'jennifer', 'linda', 'elizabeth', 'barbara', 'susan',
+            'jessica', 'sarah', 'karen', 'nancy', 'lisa', 'betty', 'helen', 'sandra',
+            'donna', 'carol', 'ruth', 'sharon', 'michelle', 'laura', 'sarah', 'kimberly',
+            'deborah', 'dorothy', 'lisa', 'nancy', 'karen', 'betty', 'helen', 'sandra',
+            'emma', 'olivia', 'ava', 'isabella', 'sophia', 'charlotte', 'mia', 'amelia',
+            'harper', 'evelyn', 'abigail', 'emily', 'ella', 'elizabeth', 'camila', 'luna',
+            'liam', 'noah', 'oliver', 'elijah', 'william', 'james', 'benjamin', 'lucas',
+            'henry', 'alexander', 'mason', 'michael', 'ethan', 'daniel', 'jacob', 'logan',
+            'jackson', 'levi', 'sebastian', 'mateo', 'jack', 'owen', 'theodore', 'aiden'
+        }
+        
+        # Common last names for validation
+        self.common_last_names = {
+            'smith', 'johnson', 'williams', 'brown', 'jones', 'garcia', 'miller', 'davis',
+            'rodriguez', 'martinez', 'hernandez', 'lopez', 'gonzalez', 'wilson', 'anderson',
+            'thomas', 'taylor', 'moore', 'jackson', 'martin', 'lee', 'perez', 'thompson',
+            'white', 'harris', 'sanchez', 'clark', 'ramirez', 'lewis', 'robinson', 'walker',
+            'young', 'allen', 'king', 'wright', 'scott', 'torres', 'nguyen', 'hill',
+            'flores', 'green', 'adams', 'nelson', 'baker', 'hall', 'rivera', 'campbell',
+            'mitchell', 'carter', 'roberts', 'gomez', 'phillips', 'evans', 'turner',
+            'diaz', 'parker', 'cruz', 'edwards', 'collins', 'reyes', 'stewart', 'morris'
+        }
+        
+        # Non-human name patterns to filter out
+        self.non_human_patterns = {
+            # Company/brand names
+            'inc', 'corp', 'ltd', 'llc', 'company', 'solutions', 'systems', 'technologies',
+            'services', 'group', 'team', 'department', 'office', 'center', 'institute',
+            'foundation', 'organization', 'association', 'society', 'club', 'network',
+            # Technical terms
+            'admin', 'support', 'service', 'system', 'server', 'database', 'application',
+            'software', 'hardware', 'platform', 'framework', 'api', 'sdk', 'tool',
+            # Generic terms
+            'contact', 'info', 'sales', 'marketing', 'customer', 'client', 'user',
+            'account', 'profile', 'member', 'visitor', 'guest', 'public', 'private'
+        }
+        
         # Enhanced email regex patterns
         self.email_patterns = [
             r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b',
-            r'\b[A-Za-z0-9._%+-]+\s*@\s*[A-Za-z0-9.-]+\s*\.\s*[A-Z|a-z]{2,}\b',
-            r'\b[A-Za-z0-9._%+-]+\[at\][A-Za-z0-9.-]+\[dot\][A-Z|a-z]{2,}\b',
-            r'\b[A-Za-z0-9._%+-]+\s*\(at\)\s*[A-Za-z0-9.-]+\s*\(dot\)\s*[A-Z|a-z]{2,}\b'
+            r'\b[A-Za-z0-9._%+-]+\s*@\s*[A-Za-z0-9.-]+\s*\.\s*[A-Z|a-z]{2,}\b'
         ]
         
-        # Enhanced discovery paths for executive information
+        # Enhanced discovery paths for legitimate executive information
         self.discovery_paths = [
-            '/team', '/about', '/staff', '/people', '/employees',
-            '/contact', '/about-us', '/management', '/leadership',
-            '/directory', '/members', '/crew', '/board', '/executives',
-            '/founders', '/leadership-team', '/our-team', '/company',
-            '/advisory-board', '/board-of-directors', '/senior-leadership',
-            '/c-suite', '/management-team', '/key-personnel'
+            '/team', '/about', '/staff', '/people', '/employees', '/contact', '/about-us',
+            '/management', '/leadership', '/directory', '/members', '/executives',
+            '/founders', '/leadership-team', '/our-team', '/company', '/board-of-directors'
         ]
         
-        # Executive title patterns for identification
-        self.executive_titles = [
-            r'\b(?:Chief|Senior|Executive|Managing|General)\s+(?:Executive|Technology|Information|Security|Financial|Operations|Marketing|Strategy|Legal|Human Resources|Data|Innovation|Product|Revenue|Customer|Commercial)\s+Officer\b',
-            r'\b(?:CEO|CTO|CIO|CISO|CFO|COO|CMO|CSO|CLO|CHRO|CDO|CPO|CRO|CCO)\b',
-            r'\bPresident\b', r'\bVice\s+President\b', r'\bSenior\s+Vice\s+President\b',
-            r'\bFounder\b', r'\bCo-Founder\b', r'\bManaging\s+Director\b',
-            r'\bDirector\b', r'\bSenior\s+Director\b', r'\bExecutive\s+Director\b',
-            r'\bHead\s+of\b', r'\bVP\s+of\b', r'\bSenior\s+VP\b',
-            r'\bPartner\b', r'\bSenior\s+Partner\b', r'\bManaging\s+Partner\b'
-        ]
+        # Realistic executive title patterns
+        self.executive_titles = {
+            'ceo': 'Chief Executive Officer',
+            'cto': 'Chief Technology Officer', 
+            'cfo': 'Chief Financial Officer',
+            'coo': 'Chief Operating Officer',
+            'cmo': 'Chief Marketing Officer',
+            'ciso': 'Chief Information Security Officer',
+            'president': 'President',
+            'founder': 'Founder',
+            'co-founder': 'Co-Founder',
+            'vice president': 'Vice President',
+            'vp': 'Vice President',
+            'director': 'Director',
+            'managing director': 'Managing Director'
+        }
         
-        # Social media platforms with advanced patterns
+        # Social media platforms with realistic validation
         self.social_platforms = {
             'linkedin.com': {
-                'patterns': [
-                    r'linkedin\.com/in/([a-zA-Z0-9\-]+)',
-                    r'linkedin\.com/pub/([a-zA-Z0-9\-]+)',
-                    r'linkedin\.com/profile/view\?id=([0-9]+)'
-                ],
-                'priority': 'high'
+                'patterns': [r'linkedin\.com/in/([a-zA-Z0-9\-]+)'],
+                'priority': 'high',
+                'min_length': 3,
+                'max_length': 30
             },
             'twitter.com': {
-                'patterns': [
-                    r'twitter\.com/([a-zA-Z0-9_]+)',
-                    r'@([a-zA-Z0-9_]+)'
-                ],
-                'priority': 'medium'
+                'patterns': [r'twitter\.com/([a-zA-Z0-9_]+)'],
+                'priority': 'medium', 
+                'min_length': 2,
+                'max_length': 15
             },
             'github.com': {
-                'patterns': [
-                    r'github\.com/([a-zA-Z0-9\-]+)'
-                ],
-                'priority': 'medium'
-            },
-            'facebook.com': {
-                'patterns': [
-                    r'facebook\.com/([a-zA-Z0-9\.]+)'
-                ],
-                'priority': 'low'
+                'patterns': [r'github\.com/([a-zA-Z0-9\-]+)'],
+                'priority': 'medium',
+                'min_length': 2,
+                'max_length': 39
             }
         }
         
-        # Advanced name extraction patterns
+        # Realistic name patterns with better validation
         self.name_patterns = [
-            r'\b([A-Z][a-z]+ [A-Z][a-z]+)\b',  # First Last
-            r'\b([A-Z][a-z]+ [A-Z]\. [A-Z][a-z]+)\b',  # First M. Last
-            r'\b([A-Z][a-z]+ [A-Z][a-z]+ [A-Z][a-z]+)\b',  # First Middle Last
-            r'([A-Z][a-z]+),\s+([A-Z][a-z]+)',  # Last, First
+            r'\b([A-Z][a-z]{2,15})\s+([A-Z][a-z]{2,20})\b',  # First Last
+            r'\b([A-Z][a-z]{2,15})\s+([A-Z]\.)\s+([A-Z][a-z]{2,20})\b',  # First M. Last
+            r'\b([A-Z][a-z]{2,15})\s+([A-Z][a-z]{2,15})\s+([A-Z][a-z]{2,20})\b'  # First Middle Last
         ]
         
-        # Phone number patterns
-        self.phone_patterns = [
-            r'\+?1?[-.\s]?\(?([0-9]{3})\)?[-.\s]?([0-9]{3})[-.\s]?([0-9]{4})',
-            r'\+?([0-9]{1,4})[-.\s]?([0-9]{3,4})[-.\s]?([0-9]{3,4})[-.\s]?([0-9]{3,4})'
+        # Realistic job title patterns with context
+        self.job_title_contexts = [
+            r'(?i)(?:title|position|role):\s*([A-Z][a-zA-Z\s]{5,50})',
+            r'(?i)([A-Z][a-zA-Z\s]{5,50})(?:\s+at\s+|\s+for\s+)',
+            r'(?i)(?:as|is)\s+(?:a\s+|an\s+|the\s+)?([A-Z][a-zA-Z\s]{5,50})',
         ]
+        
+        # Phone number patterns (more restrictive)
+        self.phone_patterns = [
+            r'\+?1?[-.\s]?\(?([0-9]{3})\)?[-.\s]?([0-9]{3})[-.\s]?([0-9]{4})\b'
+        ]
+
+    def is_realistic_name(self, name: str) -> bool:
+        """Validate if a name appears to be a real person's name"""
+        if not name or len(name) < 3:
+            return False
+            
+        # Remove extra whitespace and split
+        name_parts = name.strip().split()
+        if len(name_parts) < 2 or len(name_parts) > 4:
+            return False
+            
+        first_name = name_parts[0].lower()
+        last_name = name_parts[-1].lower()
+        
+        # Check against non-human patterns
+        name_lower = name.lower()
+        for pattern in self.non_human_patterns:
+            if pattern in name_lower:
+                return False
+        
+        # Check if it looks like a real name
+        # At least one part should be a common name OR follow realistic patterns
+        is_realistic = (
+            first_name in self.common_first_names or
+            last_name in self.common_last_names or
+            (len(first_name) >= 3 and first_name.isalpha() and
+             len(last_name) >= 3 and last_name.isalpha())
+        )
+        
+        # Additional validation
+        if is_realistic:
+            # Avoid obvious non-names
+            avoid_patterns = ['page', 'home', 'main', 'site', 'web', 'link', 'click', 'here', 'learn', 'more']
+            if any(pattern in name_lower for pattern in avoid_patterns):
+                return False
+                
+            # Check for realistic length and character patterns
+            if all(len(part) >= 2 and part.isalpha() for part in name_parts):
+                return True
+        
+        return False
+
+    def is_realistic_job_title(self, title: str) -> bool:
+        """Validate if a job title appears realistic"""
+        if not title or len(title) < 5 or len(title) > 60:
+            return False
+            
+        title_lower = title.lower()
+        
+        # Must contain job-related keywords
+        job_keywords = [
+            'manager', 'director', 'officer', 'president', 'executive', 'lead',
+            'head', 'chief', 'senior', 'junior', 'associate', 'assistant',
+            'engineer', 'developer', 'designer', 'analyst', 'consultant',
+            'specialist', 'coordinator', 'supervisor', 'administrator'
+        ]
+        
+        has_job_keyword = any(keyword in title_lower for keyword in job_keywords)
+        if not has_job_keyword:
+            return False
+            
+        # Avoid non-job patterns
+        avoid_patterns = [
+            'click', 'here', 'more', 'info', 'page', 'site', 'web', 'link',
+            'button', 'menu', 'nav', 'header', 'footer', 'sidebar'
+        ]
+        
+        if any(pattern in title_lower for pattern in avoid_patterns):
+            return False
+            
+        return True
+
+    def validate_social_profile(self, platform: str, username: str) -> bool:
+        """Validate if a social media profile appears realistic"""
+        # Handle platform name mapping
+        platform_key = f"{platform}.com"
+        if platform_key not in self.social_platforms:
+            return False
+            
+        config = self.social_platforms[platform_key]
+        
+        # Check length constraints
+        if len(username) < config['min_length'] or len(username) > config['max_length']:
+            return False
+            
+        # Check for realistic patterns
+        if not re.match(r'^[a-zA-Z0-9_-]+$', username):
+            return False
+            
+        # Avoid obviously fake patterns
+        fake_patterns = ['test', 'example', 'demo', 'sample', 'fake', 'null', 'none']
+        username_lower = username.lower()
+        
+        if any(pattern in username_lower for pattern in fake_patterns):
+            return False
+            
+        return True
     
     async def discover_people(self, lead: Lead, assets: List[Asset]) -> Dict[str, Any]:
         """Enhanced people discovery with executive profiling"""
@@ -169,6 +307,9 @@ class PeopleDiscoverer:
         # Generate risk assessment
         discovered_people['risk_assessment'] = self._generate_risk_assessment(discovered_people)
         
+        # Final validation and filtering
+        discovered_people = self._final_validation_filter(discovered_people)
+        
         # Convert sets to lists for JSON serialization
         discovered_people['emails'] = list(discovered_people['emails'])
         discovered_people['names'] = list(discovered_people['names'])
@@ -179,7 +320,49 @@ class PeopleDiscoverer:
         logger.info(f"Enhanced people discovery completed for {lead.domain}: "
                    f"{len(discovered_people['emails'])} emails, "
                    f"{len(discovered_people['names'])} names, "
-                   f"{len(discovered_people['executives'])} executives")
+                   f"{len(discovered_people['executives'])} executives, "
+                   f"{len(discovered_people['social_profiles'])} social profiles")
+        
+        return discovered_people
+
+    def _final_validation_filter(self, discovered_people: Dict[str, Any]) -> Dict[str, Any]:
+        """Apply final validation and filtering to remove unrealistic results"""
+        
+        # Filter names with additional validation
+        validated_names = set()
+        for name in discovered_people['names']:
+            if self.is_realistic_name(name):
+                validated_names.add(name)
+        discovered_people['names'] = validated_names
+        
+        # Filter job titles with additional validation
+        validated_titles = set()
+        for title in discovered_people['job_titles']:
+            if self.is_realistic_job_title(title):
+                validated_titles.add(title)
+        discovered_people['job_titles'] = validated_titles
+        
+        # Filter social profiles
+        validated_social = []
+        for profile in discovered_people['social_profiles']:
+            if profile.get('validated', False):
+                validated_social.append(profile)
+        discovered_people['social_profiles'] = validated_social
+        
+        # Filter executives
+        validated_executives = []
+        for executive in discovered_people['executives']:
+            if (executive.get('validated', False) and 
+                self.is_realistic_name(executive.get('name', ''))):
+                validated_executives.append(executive)
+        discovered_people['executives'] = validated_executives
+        
+        # Filter LinkedIn profiles
+        validated_linkedin = []
+        for profile in discovered_people['linkedin_profiles']:
+            if profile.get('validated', False):
+                validated_linkedin.append(profile)
+        discovered_people['linkedin_profiles'] = validated_linkedin
         
         return discovered_people
     
@@ -259,68 +442,91 @@ class PeopleDiscoverer:
             return self._empty_result()
     
     def _extract_emails_enhanced(self, content: str, domain: str) -> Set[str]:
-        """Enhanced email extraction with domain validation"""
+        """Enhanced email extraction with realistic validation"""
         emails = set()
+        
+        # Common spam/fake email patterns to avoid
+        spam_patterns = ['test@', 'example@', 'demo@', 'sample@', 'fake@', 'noreply@', 'no-reply@']
         
         for pattern in self.email_patterns:
             matches = re.findall(pattern, content, re.IGNORECASE)
             for email in matches:
                 email = email.lower().strip()
                 
-                # Enhanced validation
-                if '@' in email and '.' in email:
-                    # Prefer company domain emails
-                    if domain in email:
-                        emails.add(email)
-                    # Also collect external emails but with lower priority
-                    elif len(emails) < 20:  # Limit external emails
-                        emails.add(email)
+                # Basic validation
+                if '@' in email and '.' in email and len(email) > 5:
+                    # Skip obvious spam/fake emails
+                    if any(spam in email for spam in spam_patterns):
+                        continue
+                    
+                    # Skip emails with suspicious patterns
+                    if email.count('@') != 1 or email.startswith('.') or email.endswith('.'):
+                        continue
+                    
+                    local_part, email_domain = email.split('@', 1)
+                    
+                    # Validate local part (username)
+                    if (len(local_part) >= 2 and 
+                        not local_part.startswith('-') and 
+                        not local_part.endswith('-')):
+                        
+                        # Prefer company domain emails
+                        if domain in email_domain:
+                            emails.add(email)
+                        # Collect realistic external emails (limited)
+                        elif len(emails) < 15 and '.' in email_domain:
+                            emails.add(email)
         
         return emails
     
     def _extract_people_info_enhanced(self, content: str) -> tuple[Set[str], Set[str], Set[str]]:
-        """Enhanced extraction of names, job titles, and departments"""
+        """Enhanced extraction of names, job titles, and departments with validation"""
         names = set()
         job_titles = set()
         departments = set()
         
-        # Enhanced name extraction
+        # Enhanced name extraction with validation
         for pattern in self.name_patterns:
-            matches = re.findall(pattern, content, re.IGNORECASE)
+            matches = re.findall(pattern, content)
             for match in matches:
                 if isinstance(match, tuple):
-                    name = ' '.join(filter(None, match))
+                    # Handle tuple matches (first, middle, last)
+                    name_parts = [part for part in match if part and part != '.']
+                    name = ' '.join(name_parts)
                 else:
                     name = match
                 
-                if len(name.split()) >= 2 and len(name) <= 50:
+                # Validate the name before adding
+                if self.is_realistic_name(name):
                     names.add(name.title())
         
-        # Enhanced job title extraction
-        title_patterns = [
-            r'\b(?:' + '|'.join([
-                'Director', 'Manager', 'Executive', 'Officer', 'President', 'VP', 'Vice President',
-                'Coordinator', 'Specialist', 'Analyst', 'Engineer', 'Developer', 'Designer',
-                'Consultant', 'Advisor', 'Lead', 'Head', 'Chief', 'Senior', 'Principal'
-            ]) + r')\b[^\.]{0,50}',
-            r'(?:' + '|'.join(self.executive_titles) + r')'
-        ]
-        
-        for pattern in title_patterns:
-            matches = re.findall(pattern, content, re.IGNORECASE)
+        # Enhanced job title extraction with context validation
+        for pattern in self.job_title_contexts:
+            matches = re.findall(pattern, content)
             for title in matches:
-                if 5 <= len(title) <= 60:
+                if self.is_realistic_job_title(title):
                     job_titles.add(title.strip().title())
         
-        # Department extraction
+        # Look for executive titles with better context
+        exec_context_pattern = r'(?i)([A-Z][a-z]{2,15}\s+[A-Z][a-z]{2,20})[,\s]*(?:[-–—]|is|as)?\s*(' + '|'.join(self.executive_titles.keys()) + r')\b'
+        exec_matches = re.findall(exec_context_pattern, content)
+        for name, title_key in exec_matches:
+            if self.is_realistic_name(name):
+                names.add(name.title())
+                full_title = self.executive_titles.get(title_key.lower(), title_key.title())
+                job_titles.add(full_title)
+        
+        # Department extraction (keep simple and accurate)
         dept_keywords = [
-            'Engineering', 'Marketing', 'Sales', 'HR', 'Human Resources', 'Finance',
-            'Operations', 'IT', 'Security', 'Legal', 'Product', 'Design', 'Research',
-            'Development', 'Customer Success', 'Support', 'Business Development'
+            'Engineering', 'Marketing', 'Sales', 'Human Resources', 'Finance',
+            'Operations', 'Security', 'Legal', 'Product', 'Design', 'Research',
+            'Development', 'Customer Success', 'Business Development'
         ]
         
         for keyword in dept_keywords:
-            if keyword.lower() in content.lower():
+            # Look for department context, not just keyword presence
+            dept_pattern = rf'(?i)(?:department|team|division|group|unit).*?{keyword}|{keyword}.*?(?:department|team|division|group|unit)'
+            if re.search(dept_pattern, content):
                 departments.add(keyword)
         
         return names, job_titles, departments
@@ -345,64 +551,114 @@ class PeopleDiscoverer:
         return phones
     
     def _extract_social_links_enhanced(self, content: str) -> List[Dict[str, str]]:
-        """Enhanced social media profile extraction"""
+        """Enhanced social media profile extraction with validation"""
         social_links = []
+        seen_profiles = set()  # Avoid duplicates
         
         for platform, config in self.social_platforms.items():
+            platform_name = platform.split('.')[0]
+            
             for pattern in config['patterns']:
                 matches = re.findall(pattern, content, re.IGNORECASE)
-                for match in matches:
-                    social_links.append({
-                        'platform': platform.split('.')[0],
-                        'username': match,
-                        'url': f"https://{platform}/{match}" if not match.startswith('http') else match,
-                        'priority': config['priority']
-                    })
+                for username in matches:
+                    # Validate the profile
+                    if self.validate_social_profile(platform_name, username):
+                        profile_key = f"{platform_name}:{username.lower()}"
+                        if profile_key not in seen_profiles:
+                            social_links.append({
+                                'platform': platform_name,
+                                'username': username,
+                                'url': f"https://{platform}/{'in/' if platform_name == 'linkedin' else ''}{username}",
+                                'priority': config['priority'],
+                                'validated': True
+                            })
+                            seen_profiles.add(profile_key)
         
         return social_links
     
     def _extract_executives(self, content: str, domain: str) -> List[Dict[str, Any]]:
-        """Extract executive information with advanced pattern matching"""
+        """Extract executive information with realistic validation"""
         executives = []
+        seen_executives = set()  # Avoid duplicates
         
-        # Look for executive patterns in content
-        exec_pattern = r'(?i)(?:' + '|'.join([
-            r'([A-Z][a-z]+ [A-Z][a-z]+)[,\s]*(?:[-–—]|is|as)?\s*([A-Z][a-z]+ [A-Z][a-z]+ Officer|CEO|CTO|CIO|CISO|CFO|COO|President|VP|Director)',
-            r'([A-Z][a-z]+ [A-Z][a-z]+)[,\s]*(?:[-–—]|is|as)?\s*(Chief [A-Z][a-z]+ Officer)',
-            r'((?:Dr\.|Mr\.|Ms\.|Mrs\.)?\s*[A-Z][a-z]+ [A-Z][a-z]+)[,\s]*(?:[-–—]|is|as)?\s*(Founder|Co-Founder|Managing Director)'
-        ]) + r')'
+        # More targeted executive patterns
+        exec_patterns = [
+            # Pattern: Name followed by executive title
+            r'(?i)([A-Z][a-z]{2,15}\s+[A-Z][a-z]{2,20})[,\s]*(?:[-–—]|is|as)?\s*(CEO|CTO|CFO|COO|CIO|CISO|CMO|President|Founder|Co-Founder)\b',
+            # Pattern: Title followed by name
+            r'(?i)(CEO|CTO|CFO|COO|CIO|CISO|CMO|President|Founder|Co-Founder)[,\s]*(?:[-–—]|is|as)?\s*([A-Z][a-z]{2,15}\s+[A-Z][a-z]{2,20})',
+            # Pattern: Chief titles
+            r'(?i)([A-Z][a-z]{2,15}\s+[A-Z][a-z]{2,20})[,\s]*(?:[-–—]|is|as)?\s*(Chief\s+(?:Executive|Technology|Financial|Operating|Information|Marketing|Security)\s+Officer)',
+            # Pattern: Director/VP titles with context
+            r'(?i)([A-Z][a-z]{2,15}\s+[A-Z][a-z]{2,20})[,\s]*(?:[-–—]|is|as)?\s*((?:Vice\s+)?President|Managing\s+Director|Executive\s+Director)\b'
+        ]
         
-        matches = re.findall(exec_pattern, content)
-        for match in matches:
-            name, title = match[0], match[1]
-            if name and title and len(name.split()) >= 2:
-                executives.append({
-                    'name': name.strip().title(),
-                    'title': title.strip().title(),
-                    'domain': domain,
-                    'source': 'web_scraping',
-                    'confidence': 'medium'
-                })
+        for pattern in exec_patterns:
+            matches = re.findall(pattern, content)
+            for match in matches:
+                # Handle different match patterns
+                if len(match) == 2:
+                    # Check if first part is name or title
+                    part1, part2 = match
+                    if any(title in part1.lower() for title in self.executive_titles.keys()):
+                        # First part is title, second is name
+                        title, name = part1, part2
+                    else:
+                        # First part is name, second is title
+                        name, title = part1, part2
+                else:
+                    continue
+                
+                # Validate both name and title
+                if (self.is_realistic_name(name) and 
+                    len(title.strip()) >= 3 and 
+                    any(exec_key in title.lower() for exec_key in self.executive_titles.keys())):
+                    
+                    exec_key = f"{name.strip().lower()}:{title.strip().lower()}"
+                    if exec_key not in seen_executives:
+                        # Normalize the title
+                        normalized_title = title.strip().title()
+                        for key, full_title in self.executive_titles.items():
+                            if key in title.lower():
+                                normalized_title = full_title
+                                break
+                        
+                        executives.append({
+                            'name': name.strip().title(),
+                            'title': normalized_title,
+                            'domain': domain,
+                            'source': 'web_scraping',
+                            'confidence': 'high',
+                            'validated': True
+                        })
+                        seen_executives.add(exec_key)
         
         return executives
     
     def _extract_linkedin_profiles(self, content: str) -> List[Dict[str, str]]:
-        """Extract LinkedIn profiles with detailed information"""
+        """Extract LinkedIn profiles with validation"""
         profiles = []
+        seen_profiles = set()
         
         linkedin_patterns = [
             r'linkedin\.com/in/([a-zA-Z0-9\-]+)',
-            r'linkedin\.com/pub/([a-zA-Z0-9\-]+)/[a-zA-Z0-9\-/]+'
+            r'linkedin\.com/pub/([a-zA-Z0-9\-]+)'
         ]
         
         for pattern in linkedin_patterns:
             matches = re.findall(pattern, content, re.IGNORECASE)
             for username in matches:
-                profiles.append({
-                    'username': username,
-                    'url': f"https://linkedin.com/in/{username}",
-                    'platform': 'linkedin'
-                })
+                # Validate LinkedIn username
+                if (self.validate_social_profile('linkedin', username) and 
+                    username.lower() not in seen_profiles):
+                    
+                    profiles.append({
+                        'username': username,
+                        'url': f"https://linkedin.com/in/{username}",
+                        'platform': 'linkedin',
+                        'validated': True
+                    })
+                    seen_profiles.add(username.lower())
         
         return profiles
     

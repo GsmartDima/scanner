@@ -452,6 +452,7 @@ class ScanResult(BaseModel):
     scan_completed_at: Optional[datetime] = None
     scan_duration: Optional[float] = None  # seconds
     error_message: Optional[str] = None
+    pdf_report_path: Optional[str] = None  # Path to generated PDF report
 
 
 class ScanRequest(BaseModel):

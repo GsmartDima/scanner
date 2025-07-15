@@ -728,9 +728,9 @@ function displayScanResults(results) {
                         `<div class="mt-3">
                             <small class="text-muted">Recent Vulnerabilities:</small>
                             ${result.vulnerabilities.slice(0, 2).map(vuln => `
-                                <div class="vulnerability-item vulnerability-${vuln.severity.toLowerCase()} mt-2">
-                                    <strong>${escapeHtml(vuln.cve_id)}</strong> - ${escapeHtml(vuln.description)}
-                                    <span class="badge bg-${getSeverityColor(vuln.severity)} ms-2">${vuln.severity}</span>
+                                                            <div class="vulnerability-item vulnerability-${escapeHtml(vuln.severity.toLowerCase())} mt-2">
+                                <strong>${escapeHtml(vuln.cve_id)}</strong> - ${escapeHtml(vuln.description)}
+                                <span class="badge bg-${getSeverityColor(vuln.severity)} ms-2">${escapeHtml(vuln.severity)}</span>
                                 </div>
                             `).join('')}
                         </div>` : ''

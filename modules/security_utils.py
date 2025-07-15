@@ -5,9 +5,12 @@ Provides security functions for SSRF protection, URL validation, and input sanit
 import ipaddress
 import socket
 import logging
-from typing import Set, Union, Optional
+from typing import Set, Union, Optional, List, Dict, Any
 from urllib.parse import urlparse
 import re
+import html
+import bleach
+from markupsafe import Markup, escape
 
 logger = logging.getLogger(__name__)
 
@@ -251,3 +254,332 @@ def sanitize_filename(filename: str) -> str:
         filename = 'file'
     
     return filename 
+
+
+"""
+Security utilities for input validation and output escaping
+"""
+
+
+def escape_html(text: Union[str, None]) -> str:
+    """
+    Safely escape HTML characters to prevent XSS attacks.
+    
+    Args:
+        text: Input text that may contain HTML characters
+        
+    Returns:
+        HTML-escaped string safe for insertion into HTML content
+    """
+    if text is None:
+        return ""
+    if not isinstance(text, str):
+        text = str(text)
+    return html.escape(text, quote=True)
+
+
+def escape_html_attribute(text: Union[str, None]) -> str:
+    """
+    Escape text for safe insertion into HTML attributes.
+    
+    Args:
+        text: Input text for HTML attribute
+        
+    Returns:
+        Safely escaped string for HTML attributes
+    """
+    if text is None:
+        return ""
+    if not isinstance(text, str):
+        text = str(text)
+    
+    # Escape HTML entities and quotes
+    text = html.escape(text, quote=True)
+    
+    # Additional escaping for attribute context
+    text = text.replace("'", "&#x27;")
+    text = text.replace("`", "&#x60;")
+    
+    return text
+
+
+def sanitize_html_content(content: Union[str, None], allowed_tags: Optional[List[str]] = None) -> str:
+    """
+    Sanitize HTML content by removing dangerous tags and attributes.
+    
+    Args:
+        content: HTML content to sanitize
+        allowed_tags: List of allowed HTML tags (default: none for complete stripping)
+        
+    Returns:
+        Sanitized HTML content
+    """
+    if content is None:
+        return ""
+    
+    if not isinstance(content, str):
+        content = str(content)
+    
+    if allowed_tags is None:
+        # Default: strip all HTML tags, keep text content only
+        allowed_tags = []
+    
+    allowed_attributes = {
+        'a': ['href', 'title'],
+        'abbr': ['title'],
+        'acronym': ['title'],
+    }
+    
+    # Use bleach to sanitize HTML
+    sanitized = bleach.clean(
+        content,
+        tags=allowed_tags,
+        attributes=allowed_attributes,
+        strip=True
+    )
+    
+    return sanitized
+
+
+def create_safe_html_snippet(template: str, **kwargs) -> str:
+    """
+    Create a safe HTML snippet by escaping all variables before formatting.
+    
+    Args:
+        template: HTML template string with {variable} placeholders
+        **kwargs: Variables to escape and insert into template
+        
+    Returns:
+        Safe HTML with all variables properly escaped
+    """
+    # Escape all variables
+    escaped_kwargs = {}
+    for key, value in kwargs.items():
+        if isinstance(value, (list, tuple)):
+            # Handle lists by escaping each item
+            escaped_kwargs[key] = [escape_html(item) for item in value]
+        elif isinstance(value, dict):
+            # Handle dicts by escaping values
+            escaped_kwargs[key] = {k: escape_html(v) for k, v in value.items()}
+        else:
+            escaped_kwargs[key] = escape_html(value)
+    
+    return template.format(**escaped_kwargs)
+
+
+def validate_cve_id(cve_id: str) -> bool:
+    """
+    Validate CVE ID format to prevent injection attacks.
+    
+    Args:
+        cve_id: CVE identifier to validate
+        
+    Returns:
+        True if valid CVE format, False otherwise
+    """
+    if not cve_id or not isinstance(cve_id, str):
+        return False
+    
+    # CVE format: CVE-YYYY-NNNN (where YYYY is year, NNNN is 4+ digits)
+    cve_pattern = r'^CVE-\d{4}-\d{4,}$'
+    return bool(re.match(cve_pattern, cve_id))
+
+
+def validate_severity_level(severity: str) -> bool:
+    """
+    Validate vulnerability severity level.
+    
+    Args:
+        severity: Severity level to validate
+        
+    Returns:
+        True if valid severity level, False otherwise
+    """
+    if not severity or not isinstance(severity, str):
+        return False
+    
+    valid_severities = {'CRITICAL', 'HIGH', 'MEDIUM', 'LOW', 'INFO'}
+    return severity.upper() in valid_severities
+
+
+def sanitize_port_number(port: Union[int, str, None]) -> Optional[int]:
+    """
+    Validate and sanitize port numbers.
+    
+    Args:
+        port: Port number to validate
+        
+    Returns:
+        Valid port number or None if invalid
+    """
+    if port is None:
+        return None
+    
+    try:
+        port_int = int(port)
+        if 1 <= port_int <= 65535:
+            return port_int
+    except (ValueError, TypeError):
+        pass
+    
+    return None
+
+
+def sanitize_ip_address(ip: Union[str, None]) -> Optional[str]:
+    """
+    Validate and sanitize IP addresses.
+    
+    Args:
+        ip: IP address to validate
+        
+    Returns:
+        Valid IP address string or None if invalid
+    """
+    if not ip or not isinstance(ip, str):
+        return None
+    
+    try:
+        # This will raise ValueError if invalid
+        ipaddress.ip_address(ip.strip())
+        return ip.strip()
+    except ValueError:
+        return None
+
+
+def create_vulnerability_badge_html(severity: str, cve_id: str, cvss_score: float) -> str:
+    """
+    Create safe HTML for vulnerability badges with proper escaping.
+    
+    Args:
+        severity: Vulnerability severity level
+        cve_id: CVE identifier
+        cvss_score: CVSS score
+        
+    Returns:
+        Safe HTML for vulnerability badges
+    """
+    # Validate and escape inputs
+    severity = escape_html(severity) if validate_severity_level(severity) else "UNKNOWN"
+    cve_id = escape_html(cve_id) if validate_cve_id(cve_id) else "INVALID-CVE"
+    cvss_score = max(0.0, min(10.0, float(cvss_score))) if cvss_score else 0.0
+    
+    # Determine CSS classes based on severity
+    severity_class = {
+        'CRITICAL': 'danger',
+        'HIGH': 'warning',
+        'MEDIUM': 'info',
+        'LOW': 'success'
+    }.get(severity, 'secondary')
+    
+    cvss_class = 'danger' if cvss_score >= 7 else 'warning' if cvss_score >= 4 else 'success'
+    
+    return f'''
+    <div class="vulnerability-badges">
+        <span class="badge bg-{severity_class} me-2">{severity}</span>
+        <span class="badge bg-{cvss_class} me-2">CVSS {cvss_score:.1f}</span>
+        <span class="badge bg-primary me-2">{cve_id}</span>
+    </div>
+    ''' 
+
+
+def group_vulnerabilities_by_severity(vulnerabilities: List) -> Dict[str, List]:
+    """
+    Performance-optimized vulnerability grouping by severity.
+    
+    Args:
+        vulnerabilities: List of vulnerability objects
+        
+    Returns:
+        Dictionary with severity levels as keys and lists of vulnerabilities as values
+    """
+    groups = {}
+    for vuln in vulnerabilities:
+        severity = vuln.severity if hasattr(vuln, 'severity') else 'UNKNOWN'
+        if severity not in groups:
+            groups[severity] = []
+        groups[severity].append(vuln)
+    return groups
+
+
+def group_ports_by_state(port_results: List) -> Dict[str, List]:
+    """
+    Performance-optimized port grouping by state.
+    
+    Args:
+        port_results: List of port scan result objects
+        
+    Returns:
+        Dictionary with port states as keys and lists of ports as values
+    """
+    groups = {}
+    for port in port_results:
+        state = port.state if hasattr(port, 'state') else 'unknown'
+        if state not in groups:
+            groups[state] = []
+        groups[state].append(port)
+    return groups
+
+
+def get_open_ports(port_results: List) -> List:
+    """
+    Performance-optimized function to get only open ports.
+    
+    Args:
+        port_results: List of port scan result objects
+        
+    Returns:
+        List of open ports only
+    """
+    return [p for p in port_results if hasattr(p, 'state') and p.state == 'open']
+
+
+def count_vulnerabilities_by_severity(vulnerabilities: List) -> Dict[str, int]:
+    """
+    Performance-optimized counting of vulnerabilities by severity.
+    
+    Args:
+        vulnerabilities: List of vulnerability objects
+        
+    Returns:
+        Dictionary with severity levels as keys and counts as values
+    """
+    counts = {'CRITICAL': 0, 'HIGH': 0, 'MEDIUM': 0, 'LOW': 0}
+    for vuln in vulnerabilities:
+        severity = vuln.severity if hasattr(vuln, 'severity') else 'UNKNOWN'
+        if severity in counts:
+            counts[severity] += 1
+    return counts
+
+
+def calculate_risk_metrics(vulnerabilities: List, port_results: List) -> Dict[str, Any]:
+    """
+    Calculate comprehensive risk metrics with optimized performance.
+    
+    Args:
+        vulnerabilities: List of vulnerability objects
+        port_results: List of port scan result objects
+        
+    Returns:
+        Dictionary with calculated risk metrics
+    """
+    # Group data once for multiple operations
+    vuln_groups = group_vulnerabilities_by_severity(vulnerabilities)
+    port_groups = group_ports_by_state(port_results)
+    
+    open_ports = port_groups.get('open', [])
+    
+    # Count high-risk ports (common attack vectors)
+    high_risk_ports = {21, 23, 135, 139, 445, 1433, 1521, 3306, 3389, 5432, 5984, 6379, 27017, 50000}
+    high_risk_open_ports = [p for p in open_ports if hasattr(p, 'port') and p.port in high_risk_ports]
+    
+    return {
+        'total_vulnerabilities': len(vulnerabilities),
+        'critical_vulnerabilities': len(vuln_groups.get('CRITICAL', [])),
+        'high_vulnerabilities': len(vuln_groups.get('HIGH', [])),
+        'medium_vulnerabilities': len(vuln_groups.get('MEDIUM', [])),
+        'low_vulnerabilities': len(vuln_groups.get('LOW', [])),
+        'total_open_ports': len(open_ports),
+        'high_risk_open_ports': len(high_risk_open_ports),
+        'vulnerability_severity_distribution': {k: len(v) for k, v in vuln_groups.items()},
+        'port_state_distribution': {k: len(v) for k, v in port_groups.items()}
+    } 

@@ -27,6 +27,7 @@ from modules.email_security import EmailSecurityAnalyzer
 from modules.web_security import WebSecurityAnalyzer
 from modules.cloud_security import CloudSecurityAnalyzer
 from modules.api_security import APISecurityAnalyzer
+from modules.pdf_generator import PDFReportGenerator
 
 logger = logging.getLogger(__name__)
 
@@ -44,6 +45,7 @@ class ScanPhase(Enum):
     CLOUD_SECURITY_ASSESSMENT = "cloud_security_assessment"
     API_SECURITY_ASSESSMENT = "api_security_assessment"
     RISK_SCORING = "risk_scoring"
+    PDF_GENERATION = "pdf_generation"
     COMPLETED = "completed"
     FAILED = "failed"
 
@@ -57,7 +59,7 @@ class ScanProgress:
         self.phase_progress = 0  # 0-100 percentage
         self.overall_progress = 0  # 0-100 percentage
         self.phases_completed = 0
-        self.total_phases = 10  # Updated for new security phases
+        self.total_phases = 11  # Updated for new security phases + PDF generation
         self.current_task = "Initializing scan..."
         self.start_time = datetime.now()
         self.phase_start_time = datetime.now()
@@ -252,6 +254,9 @@ class ScannerOrchestrator:
         self.web_security_analyzer = WebSecurityAnalyzer()
         self.cloud_security_analyzer = CloudSecurityAnalyzer()
         self.api_security_analyzer = APISecurityAnalyzer()
+        
+        # PDF Report Generator
+        self.pdf_generator = PDFReportGenerator()
         
         # Track active scans and their progress
         self.active_scans: Dict[str, ScanResult] = {}
@@ -672,6 +677,28 @@ class ScannerOrchestrator:
                     })
                 
                 progress.update_phase(ScanPhase.RISK_SCORING, "Risk analysis complete", 100)
+                
+                # Phase 11: PDF Report Generation
+                progress.update_phase(ScanPhase.PDF_GENERATION, "Generating PDF report...", 0)
+                progress.log(f"📄 Phase 11: Generating PDF report for {lead.domain}", "info")
+                
+                try:
+                    # Prepare scan data for PDF generation
+                    pdf_scan_data = scan_result.dict()
+                    pdf_path = self.pdf_generator.generate_threat_analysis_pdf(pdf_scan_data, scan_id)
+                    
+                    if pdf_path:
+                        scan_result.pdf_report_path = pdf_path
+                        progress.log(f"✓ PDF report generated successfully: {pdf_path}", "success")
+                        progress.update_phase(ScanPhase.PDF_GENERATION, "PDF report generated", 100)
+                    else:
+                        progress.log("⚠️ PDF generation failed - scan data saved without report", "warning")
+                        progress.update_phase(ScanPhase.PDF_GENERATION, "PDF generation failed", 100)
+                        
+                except Exception as pdf_error:
+                    progress.log(f"⚠️ PDF generation error: {str(pdf_error)}", "warning")
+                    progress.update_phase(ScanPhase.PDF_GENERATION, "PDF generation failed", 100)
+                    logger.warning(f"PDF generation failed for {scan_id}: {pdf_error}")
                 
                 # Complete scan
                 progress.update_phase(ScanPhase.COMPLETED, "Scan completed successfully", 100)
@@ -1168,6 +1195,28 @@ class ScannerOrchestrator:
                 
                 progress.update_phase(ScanPhase.RISK_SCORING, "Risk analysis complete", 100)
                 
+                # Phase 11: PDF Report Generation
+                progress.update_phase(ScanPhase.PDF_GENERATION, "Generating PDF report...", 0)
+                progress.log(f"📄 Phase 11: Generating PDF report for {lead.domain}", "info")
+                
+                try:
+                    # Prepare scan data for PDF generation
+                    pdf_scan_data = scan_result.dict()
+                    pdf_path = self.pdf_generator.generate_threat_analysis_pdf(pdf_scan_data, scan_id)
+                    
+                    if pdf_path:
+                        scan_result.pdf_report_path = pdf_path
+                        progress.log(f"✓ PDF report generated successfully: {pdf_path}", "success")
+                        progress.update_phase(ScanPhase.PDF_GENERATION, "PDF report generated", 100)
+                    else:
+                        progress.log("⚠️ PDF generation failed - scan data saved without report", "warning")
+                        progress.update_phase(ScanPhase.PDF_GENERATION, "PDF generation failed", 100)
+                        
+                except Exception as pdf_error:
+                    progress.log(f"⚠️ PDF generation error: {str(pdf_error)}", "warning")
+                    progress.update_phase(ScanPhase.PDF_GENERATION, "PDF generation failed", 100)
+                    logger.warning(f"PDF generation failed for {scan_id}: {pdf_error}")
+                
                 # Complete scan
                 progress.update_phase(ScanPhase.COMPLETED, "Scan completed successfully", 100)
                 progress.status = "completed"
@@ -1378,9 +1427,15 @@ class ScannerOrchestrator:
         
         # Common vulnerabilities
         if analysis['common_vulnerabilities']:
-            critical_vulns = [v for v in analysis['common_vulnerabilities'] if v['severity'] == 'CRITICAL']
-            if critical_vulns:
-                concerns.append(f"{len(critical_vulns)} critical vulnerability types found across multiple domains")
+            # PERFORMANCE OPTIMIZATION: Use dict grouping instead of filtering for better performance
+            severity_counts = {}
+            for v in analysis['common_vulnerabilities']:
+                severity = v['severity']
+                severity_counts[severity] = severity_counts.get(severity, 0) + 1
+            
+            critical_count = severity_counts.get('CRITICAL', 0)
+            if critical_count > 0:
+                concerns.append(f"{critical_count} critical vulnerability types found across multiple domains")
         
         # Widespread issues
         avg_vulns = analysis['total_vulnerabilities'] / max(analysis['completed_scans'], 1)

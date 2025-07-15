@@ -148,19 +148,19 @@
                                 <div class="card border-${getSeverityClass(severity)}">
                                     <div class="card-body">
                                         <h6 class="card-title">
-                                            <span class="badge bg-${getSeverityClass(severity)}">${vuln.severity}</span>
-                                            ${vuln.cve_id || 'N/A'}
+                                            <span class="badge bg-${getSeverityClass(severity)}">${escapeHtml(vuln.severity)}</span>
+                                            ${escapeHtml(vuln.cve_id) || 'N/A'}
                                         </h6>
-                                        <p class="card-text">${vuln.description || 'No description available'}</p>
+                                        <p class="card-text">${escapeHtml(vuln.description) || 'No description available'}</p>
                                         <div class="vulnerability-details">
                                             <small class="text-muted">
-                                                <strong>Service:</strong> ${vuln.affected_service || 'N/A'}<br>
-                                                <strong>Port:</strong> ${vuln.port || 'N/A'}<br>
-                                                <strong>Version:</strong> ${vuln.affected_version || 'N/A'}<br>
-                                                <strong>CVSS Score:</strong> ${vuln.cvss_score || 'N/A'}<br>
+                                                <strong>Service:</strong> ${escapeHtml(vuln.affected_service) || 'N/A'}<br>
+                                                <strong>Port:</strong> ${escapeHtml(vuln.port) || 'N/A'}<br>
+                                                <strong>Version:</strong> ${escapeHtml(vuln.affected_version) || 'N/A'}<br>
+                                                <strong>CVSS Score:</strong> ${escapeHtml(vuln.cvss_score) || 'N/A'}<br>
                                                 <strong>Exploit Available:</strong> ${vuln.exploit_available ? 'Yes' : 'No'}<br>
                                                 <strong>Patch Available:</strong> ${vuln.patch_available ? 'Yes' : 'No'}<br>
-                                                <strong>Discovered:</strong> ${vuln.discovered_at || 'N/A'}
+                                                <strong>Discovered:</strong> ${escapeHtml(vuln.discovered_at) || 'N/A'}
                                             </small>
                                         </div>
                                     </div>

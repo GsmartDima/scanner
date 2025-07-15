@@ -28,6 +28,18 @@ from models import (
 )
 from modules.lead_input import LeadInputProcessor
 from modules.scanner_orchestrator import ScannerOrchestrator
+from modules.security_utils import (
+    escape_html, escape_html_attribute, sanitize_html_content,
+    create_safe_html_snippet, validate_cve_id, validate_severity_level,
+    sanitize_port_number, sanitize_ip_address, create_vulnerability_badge_html,
+    group_vulnerabilities_by_severity, get_open_ports, count_vulnerabilities_by_severity,
+    calculate_risk_metrics
+)
+try:
+    from modules.ml_exploit_prediction import MLExploitPredictor, SalesIntelligenceGenerator
+    ML_AVAILABLE = True
+except ImportError:
+    ML_AVAILABLE = False
 from modules.apollo_parser import parse_apollo_file
 
 # Configure logging
@@ -1242,6 +1254,103 @@ async def export_scan_html(scan_id: str):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@app.get("/api/export/pdf/{scan_id}")
+async def export_scan_pdf(scan_id: str):
+    """Download the generated PDF threat analysis report"""
+    try:
+        if scan_id not in scan_results_store:
+            raise HTTPException(status_code=404, detail="Scan result not found")
+        
+        result = scan_results_store[scan_id]
+        
+        # Check if PDF was generated during scan
+        if result.pdf_report_path and Path(result.pdf_report_path).exists():
+            pdf_path = Path(result.pdf_report_path)
+            filename = f"threat_analysis_{result.lead.domain}_{datetime.now().strftime('%Y%m%d')}.pdf"
+            
+            logger.info(f"Serving PDF report for scan {scan_id}: {pdf_path}")
+            return FileResponse(
+                path=pdf_path,
+                filename=filename,
+                media_type='application/pdf'
+            )
+        else:
+            # Try to generate PDF on-demand if not available
+            try:
+                from modules.pdf_generator import PDFReportGenerator
+                pdf_generator = PDFReportGenerator()
+                
+                pdf_scan_data = result.dict()
+                pdf_path = pdf_generator.generate_threat_analysis_pdf(pdf_scan_data, scan_id)
+                
+                if pdf_path and Path(pdf_path).exists():
+                    # Update scan result with PDF path
+                    result.pdf_report_path = pdf_path
+                    scan_results_store[scan_id] = result
+                    
+                    filename = f"threat_analysis_{result.lead.domain}_{datetime.now().strftime('%Y%m%d')}.pdf"
+                    
+                    logger.info(f"Generated PDF on-demand for scan {scan_id}: {pdf_path}")
+                    return FileResponse(
+                        path=pdf_path,
+                        filename=filename,
+                        media_type='application/pdf'
+                    )
+                else:
+                    raise HTTPException(status_code=500, detail="Failed to generate PDF report")
+                    
+            except Exception as pdf_error:
+                logger.error(f"On-demand PDF generation failed for {scan_id}: {pdf_error}")
+                raise HTTPException(status_code=500, detail="PDF report not available and generation failed")
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Export PDF failed: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/reports/list")
+async def list_pdf_reports():
+    """List all available PDF reports"""
+    try:
+        from modules.pdf_generator import PDFReportGenerator
+        pdf_generator = PDFReportGenerator()
+        
+        reports = pdf_generator.list_generated_reports()
+        
+        # Enrich with scan data if available
+        enriched_reports = []
+        for report in reports:
+            enriched_report = report.copy()
+            scan_id = report.get('scan_id')
+            
+            if scan_id and scan_id in scan_results_store:
+                scan_result = scan_results_store[scan_id]
+                enriched_report.update({
+                    'domain': scan_result.lead.domain,
+                    'company_name': scan_result.lead.company_name,
+                    'risk_score': scan_result.risk_score.overall_score if scan_result.risk_score else None,
+                    'risk_category': scan_result.risk_score.risk_category if scan_result.risk_score else None,
+                    'vulnerabilities_count': len(scan_result.vulnerabilities),
+                    'scan_completed_at': scan_result.scan_completed_at.isoformat() if scan_result.scan_completed_at else None
+                })
+            
+            enriched_reports.append(enriched_report)
+        
+        return APIResponse(
+            message=f"Found {len(reports)} PDF reports",
+            data={
+                "reports": enriched_reports,
+                "total_reports": len(reports)
+            }
+        )
+    
+    except Exception as e:
+        logger.error(f"List PDF reports failed: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 def generate_scan_csv(scan_result: ScanResult) -> str:
     """Generate CSV content from scan result"""
     import csv
@@ -1319,7 +1428,8 @@ def generate_scan_html(scan_result: ScanResult) -> str:
     # Calculate summary stats
     total_assets = len(scan_result.assets)
     total_vulnerabilities = len(scan_result.vulnerabilities)
-    open_ports = len([p for p in scan_result.port_scan_results if p.state == 'open'])
+    # PERFORMANCE OPTIMIZATION: Use optimized port filtering
+    open_ports = len(get_open_ports(scan_result.port_scan_results))
     
     # Vulnerability severity counts
     vuln_counts = {'CRITICAL': 0, 'HIGH': 0, 'MEDIUM': 0, 'LOW': 0}
@@ -1498,7 +1608,7 @@ def generate_scan_html(scan_result: ScanResult) -> str:
 
 
 def generate_vulnerabilities_html(vulnerabilities: List) -> str:
-    """Generate HTML section for vulnerabilities"""
+    """Generate HTML section for vulnerabilities with proper XSS protection"""
     if not vulnerabilities:
         return """
         <div class="row mb-5">
@@ -1514,48 +1624,97 @@ def generate_vulnerabilities_html(vulnerabilities: List) -> str:
     
     html = '<div class="row mb-5"><div class="col-12"><h3><i class="fas fa-bug me-2"></i>Detailed Vulnerabilities</h3>'
     
-    # Group vulnerabilities by severity
+    # PERFORMANCE OPTIMIZATION: Group vulnerabilities by severity using dict for O(n) complexity
+    # Instead of filtering the list multiple times (O(n*m)), group once (O(n))
+    severity_groups = {}
+    for vuln in vulnerabilities:
+        severity = vuln.severity
+        if severity not in severity_groups:
+            severity_groups[severity] = []
+        severity_groups[severity].append(vuln)
+    
+    # Process in priority order
     severity_order = ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW']
     for severity in severity_order:
-        severity_vulns = [v for v in vulnerabilities if v.severity == severity]
+        severity_vulns = severity_groups.get(severity, [])
         if not severity_vulns:
             continue
             
-        html += f'<h4 class="mt-4 mb-3 text-{get_severity_color(severity)}"><i class="fas fa-exclamation-circle me-2"></i>{severity} Vulnerabilities ({len(severity_vulns)})</h4>'
+        # Safely escape severity level
+        safe_severity = escape_html(severity)
+        severity_color = get_severity_color(severity)  # This function should be safe
+        
+        html += create_safe_html_snippet(
+            '<h4 class="mt-4 mb-3 text-{color}"><i class="fas fa-exclamation-circle me-2"></i>{severity} Vulnerabilities ({count})</h4>',
+            color=severity_color,
+            severity=safe_severity,
+            count=len(severity_vulns)
+        )
         
         for vuln in severity_vulns:
+            # Safely escape all vulnerability data
+            safe_cve_id = escape_html(vuln.cve_id) if vuln.cve_id else "UNKNOWN-CVE"
+            safe_description = sanitize_html_content(vuln.description) if vuln.description else "No description available"
+            safe_affected_service = escape_html(vuln.affected_service) if vuln.affected_service else ""
+            safe_remediation = sanitize_html_content(vuln.remediation_advice) if hasattr(vuln, 'remediation_advice') and vuln.remediation_advice else ""
+            safe_port = sanitize_port_number(vuln.port) if vuln.port else None
+            safe_cvss = max(0.0, min(10.0, float(vuln.cvss_score))) if vuln.cvss_score else 0.0
+            
+            # Build MITRE badges safely
             mitre_badges = ""
             if hasattr(vuln, 'mitre_techniques') and vuln.mitre_techniques:
                 for technique in vuln.mitre_techniques:
-                    mitre_badges += f'<span class="badge mitre-badge me-1">{technique.technique_id}</span>'
+                    safe_technique_id = escape_html(technique.technique_id) if hasattr(technique, 'technique_id') else ""
+                    if safe_technique_id:
+                        mitre_badges += f'<span class="badge mitre-badge me-1">{safe_technique_id}</span>'
             
-            remediation = ""
-            if hasattr(vuln, 'remediation_advice') and vuln.remediation_advice:
-                remediation = f'<div class="mt-2"><strong>Remediation:</strong> {vuln.remediation_advice}</div>'
+            # Build remediation section safely
+            remediation_html = ""
+            if safe_remediation:
+                remediation_html = f'<div class="mt-2"><strong>Remediation:</strong> {safe_remediation}</div>'
             
-            risk_factors = ""
+            # Build risk factors safely
+            risk_factors_html = ""
             if hasattr(vuln, 'risk_factors') and vuln.risk_factors:
-                risk_factors = '<div class="mt-2"><strong>Risk Factors:</strong><ul class="mb-0">' + ''.join([f'<li>{factor}</li>' for factor in vuln.risk_factors]) + '</ul></div>'
+                safe_factors = [escape_html(factor) for factor in vuln.risk_factors if factor]
+                if safe_factors:
+                    factors_list = ''.join([f'<li>{factor}</li>' for factor in safe_factors])
+                    risk_factors_html = f'<div class="mt-2"><strong>Risk Factors:</strong><ul class="mb-0">{factors_list}</ul></div>'
+            
+            # Build service and port badges safely
+            service_badge = f'<span class="badge bg-secondary me-2">{safe_affected_service}</span>' if safe_affected_service else ''
+            port_badge = f'<span class="badge bg-dark me-2">Port {safe_port}</span>' if safe_port else ''
+            exploit_badge = '<span class="badge bg-danger">Exploit Available</span>' if vuln.exploit_available else ''
+            
+            # Build severity and CVSS badges
+            severity_class = {
+                'CRITICAL': 'danger',
+                'HIGH': 'warning', 
+                'MEDIUM': 'info',
+                'LOW': 'success'
+            }.get(severity, 'secondary')
+            
+            cvss_class = 'danger' if safe_cvss >= 7 else 'warning' if safe_cvss >= 4 else 'success'
             
             html += f"""
             <div class="card vuln-card mb-3">
                 <div class="card-body">
                     <div class="d-flex justify-content-between align-items-start">
                         <div class="flex-grow-1">
-                            <h5 class="card-title">{vuln.cve_id}</h5>
+                            <h5 class="card-title">{safe_cve_id}</h5>
                             <div class="mb-2">
-                                <span class="badge severity-{severity.lower()} me-2">{severity}</span>
-                                <span class="badge bg-info me-2">CVSS {vuln.cvss_score}</span>
-                                {f'<span class="badge bg-secondary me-2">{vuln.affected_service}</span>' if vuln.affected_service else ''}
-                                {f'<span class="badge bg-dark me-2">Port {vuln.port}</span>' if vuln.port else ''}
-                                {'<span class="badge bg-danger">Exploit Available</span>' if vuln.exploit_available else ''}
+                                <span class="badge severity-{severity.lower()} me-2">{safe_severity}</span>
+                                <span class="badge bg-{cvss_class} me-2">CVSS {safe_cvss:.1f}</span>
+                                {service_badge}
+                                {port_badge}
+                                {exploit_badge}
                             </div>
                             {mitre_badges}
                         </div>
                     </div>
-                    <p class="card-text mt-3">{vuln.description}</p>
-                    {remediation}
-                    {risk_factors}
+                    <p class="card-text mt-3">{safe_description}</p>
+                    {remediation_html}
+                    {risk_factors_html}
                 </div>
             </div>
             """
@@ -1621,47 +1780,130 @@ def generate_assets_html(assets: List) -> str:
 
 
 def generate_ports_html(port_results: List) -> str:
-    """Generate HTML section for open ports"""
-    open_ports = [p for p in port_results if p.state == 'open']
+    """Generate HTML section for open ports with proper security and complete risk classification"""
+    # PERFORMANCE OPTIMIZATION: Use optimized port filtering
+    open_ports = get_open_ports(port_results)
     if not open_ports:
         return ""
     
     html = f'<div class="row mb-5"><div class="col-12"><h3><i class="fas fa-door-open me-2"></i>Open Ports ({len(open_ports)})</h3>'
     
-    # Group by IP address
+    # Enhanced risk classification - more comprehensive port risk assessment
+    high_risk_ports = {21, 23, 135, 139, 445, 1433, 1521, 3306, 3389, 5432, 5984, 6379, 27017, 50000}
+    medium_risk_ports = {22, 25, 53, 80, 110, 143, 389, 443, 993, 995, 1080, 3128, 8080, 8443, 9200}
+    
+    def get_port_risk_classification(port_num, service_name=""):
+        """Determine comprehensive risk level for a port"""
+        if port_num in high_risk_ports:
+            return "danger", "High Risk"
+        elif port_num in medium_risk_ports:
+            return "warning", "Medium Risk"
+        elif port_num < 1024:  # Well-known ports
+            return "info", "Standard Service"
+        else:
+            return "secondary", "Custom Service"
+    
+    # Group by IP address using dict for better performance
     ip_groups = {}
     for port in open_ports:
-        ip = port.ip_address
-        if ip not in ip_groups:
-            ip_groups[ip] = []
-        ip_groups[ip].append(port)
+        safe_ip = sanitize_ip_address(port.ip_address)
+        if safe_ip:
+            if safe_ip not in ip_groups:
+                ip_groups[safe_ip] = []
+            ip_groups[safe_ip].append(port)
     
     for ip, ip_ports in ip_groups.items():
+        # Sort ports for consistent display
+        ip_ports.sort(key=lambda x: x.port)
+        
+        # Safely escape IP address
+        safe_ip = escape_html(ip)
+        
         html += f"""
         <div class="card port-card mb-3">
             <div class="card-header bg-light">
-                <h6 class="mb-0"><i class="fas fa-server me-2"></i>IP Address: {ip}</h6>
+                <h6 class="mb-0"><i class="fas fa-server me-2"></i>IP Address: {safe_ip}</h6>
+                <small class="text-muted">{len(ip_ports)} open ports detected</small>
             </div>
             <div class="card-body">
                 <div class="row">
         """
         
         for port in ip_ports:
-            risk_class = "danger" if port.port in [21, 23, 1433, 3306, 3389, 5432, 6379] else "warning"
+            # Validate and sanitize port data
+            safe_port = sanitize_port_number(port.port)
+            if not safe_port:
+                continue  # Skip invalid ports
+                
+            safe_protocol = escape_html(port.protocol) if port.protocol else "tcp"
+            safe_service = escape_html(port.service) if port.service else "Unknown"
+            safe_version = escape_html(port.version) if port.version else ""
+            safe_state = escape_html(port.state) if port.state else "unknown"
+            
+            # Get comprehensive risk classification
+            risk_class, risk_text = get_port_risk_classification(safe_port, safe_service)
+            
+            # Truncate long service names and versions for display
+            display_service = safe_service[:20] + "..." if len(safe_service) > 20 else safe_service
+            display_version = safe_version[:30] + "..." if len(safe_version) > 30 else safe_version
+            
+            # Additional security indicators
+            security_indicators = []
+            if safe_port in high_risk_ports:
+                security_indicators.append('<span class="badge bg-danger">High Risk</span>')
+            
+            if safe_service.lower() in ['ssh', 'telnet', 'rdp']:
+                security_indicators.append('<span class="badge bg-warning">Remote Access</span>')
+                
+            if safe_service.lower() in ['mysql', 'postgresql', 'mssql', 'oracle']:
+                security_indicators.append('<span class="badge bg-info">Database</span>')
+                
+            if safe_port in [80, 443, 8080, 8443]:
+                security_indicators.append('<span class="badge bg-primary">Web Service</span>')
+                
+            indicators_html = ' '.join(security_indicators) if security_indicators else ''
+            
             html += f"""
                     <div class="col-md-4 mb-3">
-                        <div class="border rounded p-3">
-                            <h6 class="text-{risk_class}">Port {port.port}/{port.protocol}</h6>
-                            <div class="small">
-                                <strong>Service:</strong> {port.service or 'Unknown'}<br>
-                                {f'<strong>Version:</strong> {port.version}<br>' if port.version else ''}
-                                <strong>State:</strong> {port.state}
+                        <div class="border rounded p-3 h-100">
+                            <h6 class="text-{risk_class}">
+                                Port {safe_port}/{safe_protocol}
+                                <span class="badge bg-{risk_class} ms-2">{risk_text}</span>
+                            </h6>
+                            <div class="small mb-2">
+                                <strong>Service:</strong> <span title="{safe_service}">{display_service}</span><br>
+                                {f'<strong>Version:</strong> <span title="{safe_version}">{display_version}</span><br>' if safe_version else ''}
+                                <strong>State:</strong> {safe_state}<br>
+                                <strong>Risk Level:</strong> <span class="text-{risk_class}">{risk_text}</span>
                             </div>
+                            {f'<div class="mt-2">{indicators_html}</div>' if indicators_html else ''}
                         </div>
                     </div>
             """
         
         html += """
+                </div>
+            </div>
+        </div>
+        """
+    
+    # Add summary statistics
+    total_high_risk = len([p for p in open_ports if p.port in high_risk_ports])
+    total_medium_risk = len([p for p in open_ports if p.port in medium_risk_ports])
+    
+    if total_high_risk > 0 or total_medium_risk > 0:
+        html += f"""
+        <div class="alert alert-info">
+            <h6><i class="fas fa-info-circle me-2"></i>Port Risk Summary</h6>
+            <div class="row">
+                <div class="col-md-4">
+                    <strong>High Risk Ports:</strong> {total_high_risk}
+                </div>
+                <div class="col-md-4">
+                    <strong>Medium Risk Ports:</strong> {total_medium_risk}
+                </div>
+                <div class="col-md-4">
+                    <strong>Total Open Ports:</strong> {len(open_ports)}
                 </div>
             </div>
         </div>
@@ -1868,6 +2110,145 @@ async def test_vulnerabilities_page(request: Request):
 async def dashboard():
     """Serve the main dashboard interface"""
     return FileResponse("templates/index.html")
+
+
+@app.get("/api/scan/{scan_id}/sales-intelligence")
+async def get_sales_intelligence(scan_id: str, industry: str = "general"):
+    """
+    Get sales-specific intelligence for a completed scan
+    Provides actionable insights for sales outreach and prioritization
+    """
+    if not ML_AVAILABLE:
+        raise HTTPException(status_code=503, detail="ML-based sales intelligence not available")
+    
+    try:
+        # Get scan result
+        result_file = REPORTS_DIR / f"{scan_id}.json"
+        
+        if not result_file.exists():
+            raise HTTPException(status_code=404, detail="Scan not found")
+        
+        with open(result_file, 'r') as f:
+            scan_data = json.load(f)
+        
+        # Convert to ScanResult object
+        scan_result = ScanResult(**scan_data)
+        
+        # Generate sales intelligence
+        sales_generator = SalesIntelligenceGenerator()
+        intelligence = sales_generator.generate_sales_intelligence(scan_result, industry)
+        
+        # Generate exploit predictions for top vulnerabilities
+        ml_predictor = MLExploitPredictor()
+        exploit_predictions = []
+        
+        # Sort vulnerabilities by severity and get top 10
+        sorted_vulns = sorted(scan_result.vulnerabilities, 
+                            key=lambda v: {'CRITICAL': 4, 'HIGH': 3, 'MEDIUM': 2, 'LOW': 1}.get(v.severity, 0), 
+                            reverse=True)[:10]
+        
+        for vuln in sorted_vulns:
+            prediction = ml_predictor.predict_exploit_likelihood(vuln, scan_result.vulnerabilities)
+            exploit_predictions.append({
+                'cve_id': prediction.cve_id,
+                'exploit_likelihood': round(prediction.exploit_likelihood, 3),
+                'confidence_score': round(prediction.confidence_score, 3),
+                'risk_factors': prediction.risk_factors,
+                'exploit_complexity': prediction.exploit_complexity,
+                'time_to_exploit': prediction.time_to_exploit,
+                'mitigation_priority': prediction.mitigation_priority,
+                'sales_impact_score': round(prediction.sales_impact_score, 2)
+            })
+        
+        # Create comprehensive sales response
+        sales_response = {
+            'scan_id': scan_id,
+            'domain': scan_result.lead.domain,
+            'company_name': scan_result.lead.company_name,
+            'industry': industry,
+            'generated_at': datetime.now().isoformat(),
+            
+            # Core sales intelligence
+            'prospect_risk_level': intelligence.prospect_risk_level,
+            'urgency_score': round(intelligence.urgency_score, 2),
+            'estimated_attack_cost': intelligence.estimated_attack_cost,
+            
+            # Immediate action items
+            'immediate_concerns': intelligence.immediate_concerns,
+            'business_impact_summary': intelligence.business_impact_summary,
+            
+            # Sales positioning
+            'recommended_solutions': intelligence.recommended_solutions,
+            'competitive_advantages': intelligence.competitive_advantages,
+            'compliance_risks': intelligence.compliance_risks,
+            
+            # Detailed vulnerability intelligence
+            'exploit_predictions': exploit_predictions,
+            
+            # Executive summary for outreach
+            'executive_summary': _generate_executive_summary(intelligence, scan_result),
+            'call_to_action': _generate_call_to_action(intelligence),
+            
+            # Statistics for reference
+            'vulnerability_statistics': {
+                'total_vulnerabilities': len(scan_result.vulnerabilities),
+                'critical_vulnerabilities': len([v for v in scan_result.vulnerabilities if v.severity == 'CRITICAL']),
+                'high_vulnerabilities': len([v for v in scan_result.vulnerabilities if v.severity == 'HIGH']),
+                'exploitable_vulnerabilities': len([v for v in scan_result.vulnerabilities if v.exploit_available]),
+                'average_cvss_score': round(sum(v.cvss_score or 0 for v in scan_result.vulnerabilities) / max(len(scan_result.vulnerabilities), 1), 2)
+            }
+        }
+        
+        return APIResponse(
+            success=True,
+            message="Sales intelligence generated successfully",
+            data=sales_response
+        )
+        
+    except FileNotFoundError:
+        raise HTTPException(status_code=404, detail="Scan result not found")
+    except Exception as e:
+        logger.error(f"Sales intelligence generation failed: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Sales intelligence generation failed: {str(e)}")
+
+
+def _generate_executive_summary(intelligence: Any, scan_result: Any) -> str:
+    """Generate executive-friendly summary for sales outreach"""
+    domain = scan_result.lead.domain
+    company = scan_result.lead.company_name or domain
+    risk_level = intelligence.prospect_risk_level.lower()
+    
+    if intelligence.prospect_risk_level == "CRITICAL":
+        return f"Security assessment of {company} ({domain}) reveals critical vulnerabilities requiring immediate attention. " \
+               f"With an estimated potential attack cost of ${intelligence.estimated_attack_cost:,}, " \
+               f"immediate security improvements are essential to protect business operations and customer data."
+    
+    elif intelligence.prospect_risk_level == "HIGH":
+        return f"Security evaluation of {company} ({domain}) identifies significant security gaps that could " \
+               f"impact business continuity. Risk mitigation through enhanced security controls is recommended " \
+               f"to prevent potential ${intelligence.estimated_attack_cost:,} in damages."
+    
+    elif intelligence.prospect_risk_level == "MEDIUM":
+        return f"Security review of {company} ({domain}) shows moderate risk levels with opportunities for " \
+               f"proactive security enhancement. Addressing identified vulnerabilities will strengthen " \
+               f"overall security posture and reduce business risk."
+    
+    else:
+        return f"Security assessment of {company} ({domain}) indicates a relatively strong security foundation " \
+               f"with some areas for improvement. Continued security monitoring and best practices will " \
+               f"maintain robust protection against evolving threats."
+
+
+def _generate_call_to_action(intelligence: Any) -> str:
+    """Generate specific call to action based on risk level"""
+    if intelligence.urgency_score >= 8.0:
+        return "Schedule an immediate security consultation to address critical vulnerabilities and prevent potential breaches."
+    elif intelligence.urgency_score >= 6.0:
+        return "Book a security assessment meeting within the next week to discuss risk mitigation strategies."
+    elif intelligence.urgency_score >= 4.0:
+        return "Arrange a security review call to explore proactive protection measures and security improvements."
+    else:
+        return "Consider a comprehensive security evaluation to maintain strong defenses against emerging threats."
 
 
 if __name__ == "__main__":

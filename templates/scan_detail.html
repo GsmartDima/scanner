@@ -316,10 +316,92 @@
         .asset-item { border-left: 4px solid #17a2b8; }
         .port-item { border-left: 4px solid #6f42c1; }
 
-        .severity-badge-critical { background: #dc3545; color: white; }
-        .severity-badge-high { background: #fd7e14; color: white; }
-        .severity-badge-medium { background: #ffc107; color: #212529; }
-        .severity-badge-low { background: #28a745; color: white; }
+        /* Enhanced Severity Badge Colors */
+        .severity-badge-critical { 
+            background: linear-gradient(135deg, #dc3545, #b02a37); 
+            color: white; 
+            font-weight: bold;
+            box-shadow: 0 2px 4px rgba(220, 53, 69, 0.3);
+        }
+        .severity-badge-high { 
+            background: linear-gradient(135deg, #fd7e14, #e8711c); 
+            color: white; 
+            font-weight: bold;
+            box-shadow: 0 2px 4px rgba(253, 126, 20, 0.3);
+        }
+        .severity-badge-medium { 
+            background: linear-gradient(135deg, #ffc107, #e0a800); 
+            color: #212529; 
+            font-weight: bold;
+            box-shadow: 0 2px 4px rgba(255, 193, 7, 0.3);
+        }
+        .severity-badge-low { 
+            background: linear-gradient(135deg, #28a745, #20c997); 
+            color: white; 
+            font-weight: bold;
+            box-shadow: 0 2px 4px rgba(40, 167, 69, 0.3);
+        }
+
+        /* Vulnerability Display Enhancements */
+        .vulnerability-display-container {
+            background: #f8f9fa;
+            border-radius: 8px;
+            padding: 20px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+
+        .vulnerability-item {
+            background: white !important;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            transition: all 0.3s ease;
+        }
+
+        .vulnerability-item:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 15px rgba(0,0,0,0.15);
+        }
+
+        .severity-group {
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 20px;
+        }
+
+        .severity-group-critical {
+            background: linear-gradient(135deg, rgba(220, 53, 69, 0.1), rgba(176, 42, 55, 0.05));
+            border-left: 5px solid #dc3545;
+        }
+
+        .severity-group-high {
+            background: linear-gradient(135deg, rgba(253, 126, 20, 0.1), rgba(232, 113, 28, 0.05));
+            border-left: 5px solid #fd7e14;
+        }
+
+        .severity-group-medium {
+            background: linear-gradient(135deg, rgba(255, 193, 7, 0.1), rgba(224, 168, 0, 0.05));
+            border-left: 5px solid #ffc107;
+        }
+
+        .severity-group-low {
+            background: linear-gradient(135deg, rgba(40, 167, 69, 0.1), rgba(32, 201, 151, 0.05));
+            border-left: 5px solid #28a745;
+        }
+
+        .mitre-badge {
+            background: linear-gradient(135deg, #2c3e50, #34495e) !important;
+            border: 1px solid #1a252f;
+            font-size: 0.75em;
+            font-weight: bold;
+        }
+
+        .vulnerability-stats {
+            background: white;
+            border-radius: 8px;
+            padding: 15px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
 
         .risk-badge-high { background: #dc3545; color: white; }
         .risk-badge-medium { background: #ffc107; color: #212529; }
@@ -572,6 +654,9 @@
                 <i class="fas fa-arrow-left"></i> Back to Dashboard
             </a>
             <div class="btn-group" role="group" id="exportButtons" style="display: none;">
+                <button type="button" class="btn btn-danger btn-sm" onclick="exportResults('pdf')" title="Download PDF Threat Analysis Report">
+                    <i class="fas fa-file-pdf"></i> PDF Report
+                </button>
                 <button type="button" class="btn btn-success btn-sm" onclick="exportResults('csv')" title="Export as CSV">
                     <i class="fas fa-file-csv"></i> CSV
                 </button>
@@ -829,8 +914,11 @@
             <!-- Vulnerabilities Details - Full width row -->
             <div class="col-12 mb-4">
                 <div class="card">
-                    <div class="card-header">
+                    <div class="card-header d-flex justify-content-between align-items-center">
                         <h5><i class="fas fa-bug"></i> Security Vulnerabilities</h5>
+                        <button type="button" class="btn btn-sm btn-outline-primary" onclick="forceRefreshVulnerabilities()" title="Refresh vulnerability display">
+                            <i class="fas fa-sync-alt"></i> Refresh
+                        </button>
                     </div>
                     <div class="card-body">
                         <div id="vulnerabilitiesDetails">
@@ -993,9 +1081,9 @@
                         vulns.slice(0, 5).forEach((vuln, idx) => {
                             html += `
                                 <div class="alert alert-warning mb-2">
-                                    <strong>VULNERABILITY ${idx + 1}:</strong> ${vuln.cve_id || 'Unknown'}<br>
-                                    <strong>Severity:</strong> ${vuln.severity || 'Unknown'}<br>
-                                    <strong>Description:</strong> ${vuln.description || 'No description'}
+                                    <strong>VULNERABILITY ${idx + 1}:</strong> ${escapeHtml(vuln.cve_id) || 'Unknown'}<br>
+                                    <strong>Severity:</strong> ${escapeHtml(vuln.severity) || 'Unknown'}<br>
+                                    <strong>Description:</strong> ${escapeHtml(vuln.description) || 'No description'}
                                 </div>
                             `;
                         });
@@ -1507,8 +1595,8 @@
                         <div class="flex-grow-1">
                             <div class="finding-title">${escapeHtml(vuln.cve_id)}</div>
                             <div class="finding-meta">
-                                <span class="badge severity-badge-${severityClass} me-2">${vuln.severity}</span>
-                                <span class="badge bg-${cvssColor}">CVSS ${vuln.cvss_score}</span>
+                                <span class="badge severity-badge-${severityClass} me-2">${escapeHtml(vuln.severity)}</span>
+                                <span class="badge bg-${cvssColor}">CVSS ${escapeHtml(vuln.cvss_score)}</span>
                                 ${vuln.exploit_available ? '<span class="badge bg-danger ms-2">Exploit Available</span>' : ''}
                                 ${vuln.affected_service ? `<span class="badge bg-secondary ms-2">${escapeHtml(vuln.affected_service)}</span>` : ''}
                                 ${vuln.port ? `<span class="badge bg-info ms-2">Port ${vuln.port}</span>` : ''}
@@ -1873,23 +1961,26 @@
             const container = document.getElementById('vulnerabilitiesDetails');
             console.log('🔍 DEBUG: vulnerabilitiesDetails container found:', !!container);
             
-            // DEBUG: Force show container status
-            if (container) {
-                console.log('🔍 DEBUG: Container current innerHTML:', container.innerHTML);
-                console.log('🔍 DEBUG: Container parent element:', container.parentElement);
-                console.log('🔍 DEBUG: Container visibility:', window.getComputedStyle(container).display);
+            if (!container) {
+                console.error('🔍 ERROR: vulnerabilitiesDetails container not found!');
+                return;
             }
+            
+            // DEBUG: Force show container status
+            console.log('🔍 DEBUG: Container current innerHTML length:', container.innerHTML.length);
+            console.log('🔍 DEBUG: Container parent element:', container.parentElement);
+            console.log('🔍 DEBUG: Container visibility:', window.getComputedStyle(container).display);
             
             // Handle empty or null vulnerabilities
             if (!vulnerabilities || vulnerabilities.length === 0) {
                 console.log('🔍 DEBUG: No vulnerabilities found, showing empty state');
-                if (container) {
-                    container.innerHTML = '<div class="text-center text-success p-4"><i class="fas fa-shield-check fa-2x mb-3"></i><h6>No Vulnerabilities Detected</h6><p class="text-muted">Great news! No security vulnerabilities were found during the scan.</p></div>';
-                }
+                container.innerHTML = '<div class="text-center text-success p-4"><i class="fas fa-shield-check fa-2x mb-3"></i><h6>No Vulnerabilities Detected</h6><p class="text-muted">Great news! No security vulnerabilities were found during the scan.</p></div>';
                 return;
             }
             
-            // Group by severity
+            console.log('🔍 DEBUG: Processing', vulnerabilities.length, 'vulnerabilities for display');
+            
+            // Group by severity and ensure proper ordering
             const severityGroups = {
                 'CRITICAL': [],
                 'HIGH': [],
@@ -1905,19 +1996,76 @@
                     severityGroups['LOW'].push(vuln); // Default to LOW if unknown severity
                 }
             });
+
+            // Calculate statistics
+            const stats = {
+                total: vulnerabilities.length,
+                critical: severityGroups['CRITICAL'].length,
+                high: severityGroups['HIGH'].length,
+                medium: severityGroups['MEDIUM'].length,
+                low: severityGroups['LOW'].length
+            };
             
-            let html = '';
+            let html = '<div class="vulnerability-display-container">';
             
-            Object.keys(severityGroups).forEach(severity => {
+            // Add statistics header
+            html += `
+                <div class="vulnerability-stats">
+                    <div class="row text-center">
+                        <div class="col-md-2">
+                            <div class="h4 mb-0 text-primary">${stats.total}</div>
+                            <small class="text-muted">Total Vulnerabilities</small>
+                        </div>
+                        <div class="col-md-2">
+                            <div class="h4 mb-0 text-danger">${stats.critical}</div>
+                            <small class="text-muted">Critical</small>
+                        </div>
+                        <div class="col-md-2">
+                            <div class="h4 mb-0 text-warning">${stats.high}</div>
+                            <small class="text-muted">High</small>
+                        </div>
+                        <div class="col-md-2">
+                            <div class="h4 mb-0 text-info">${stats.medium}</div>
+                            <small class="text-muted">Medium</small>
+                        </div>
+                        <div class="col-md-2">
+                            <div class="h4 mb-0 text-success">${stats.low}</div>
+                            <small class="text-muted">Low</small>
+                        </div>
+                        <div class="col-md-2">
+                            <div class="h4 mb-0 text-dark">${Math.round((stats.critical * 10 + stats.high * 7 + stats.medium * 4 + stats.low * 1) / Math.max(stats.total, 1))}</div>
+                            <small class="text-muted">Avg Risk</small>
+                        </div>
+                    </div>
+                </div>
+            `;
+            
+            // Display vulnerabilities by severity (in order: CRITICAL, HIGH, MEDIUM, LOW)
+            const severityOrder = ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW'];
+            severityOrder.forEach(severity => {
                 const vulns = severityGroups[severity];
                 if (vulns.length > 0) {
                     const badgeClass = getSeverityBadgeClass(severity);
+                    const groupClass = `severity-group-${severity.toLowerCase()}`;
+                    const severityIcon = severity === 'CRITICAL' ? 'fas fa-skull-crossbones' :
+                                        severity === 'HIGH' ? 'fas fa-exclamation-triangle' :
+                                        severity === 'MEDIUM' ? 'fas fa-exclamation-circle' :
+                                        'fas fa-info-circle';
+                    
                     html += `
-                        <div class="mb-4">
-                            <h6>
-                                <span class="badge ${badgeClass}">${severity}</span>
-                                <span class="text-muted">(${vulns.length})</span>
-                            </h6>
+                        <div class="severity-group ${groupClass} mb-4">
+                            <div class="d-flex align-items-center mb-3">
+                                <i class="${severityIcon} me-2 fs-5"></i>
+                                <h5 class="mb-0 me-3">
+                                    <span class="badge ${badgeClass} fs-6">${severity}</span>
+                                </h5>
+                                <span class="text-muted">${vulns.length} ${vulns.length === 1 ? 'vulnerability' : 'vulnerabilities'}</span>
+                                <div class="ms-auto">
+                                    <small class="text-muted">
+                                        ${Math.round((vulns.length / vulnerabilities.length) * 100)}% of total
+                                    </small>
+                                </div>
+                            </div>
                             <div class="vulnerability-list">
                     `;
                     
@@ -1952,33 +2100,57 @@
                         }
                         
                         html += `
-                            <div class="vulnerability-item p-3 mb-3 border-start border-${getSeverityColor(severity)} border-3 bg-light">
+                            <div class="vulnerability-item p-4 mb-3">
                                 <div class="row">
-                                    <div class="col-md-8">
-                                        <div class="d-flex align-items-center mb-2">
-                                            <strong class="text-dark">${escapeHtml(vuln.cve_id || 'UNKNOWN-CVE')}</strong>
-                                            <span class="badge ${badgeClass} ms-2">${severity}</span>
-                                            ${vuln.exploit_available ? '<span class="badge bg-danger ms-2">Exploit Available</span>' : ''}
-                                            ${vuln.patch_available ? '<span class="badge bg-success ms-2">Patch Available</span>' : ''}
+                                    <div class="col-md-9">
+                                        <div class="d-flex align-items-center mb-3">
+                                            <div class="me-3">
+                                                <i class="fas fa-bug text-${getSeverityColor(severity)} fs-5"></i>
+                                            </div>
+                                            <div class="flex-grow-1">
+                                                <h6 class="mb-1 text-dark">${escapeHtml(vuln.cve_id || 'UNKNOWN-CVE')}</h6>
+                                                <div class="d-flex flex-wrap gap-2">
+                                                    ${vuln.exploit_available ? '<span class="badge bg-danger"><i class="fas fa-rocket"></i> Exploit Available</span>' : ''}
+                                                    ${vuln.patch_available ? '<span class="badge bg-success"><i class="fas fa-check"></i> Patch Available</span>' : '<span class="badge bg-secondary"><i class="fas fa-times"></i> No Patch</span>'}
+                                                </div>
+                                            </div>
                                         </div>
-                                        <div class="text-muted mb-2">${escapeHtml(vuln.description || 'No description available')}</div>
-                                        <div class="small">
-                                            ${vuln.affected_service ? `<strong>Service:</strong> ${escapeHtml(vuln.affected_service)}` : ''}
-                                            ${vuln.port ? ` | <strong>Port:</strong> ${vuln.port}` : ''}
-                                            ${vuln.affected_version ? ` | <strong>Version:</strong> ${escapeHtml(vuln.affected_version)}` : ''}
+                                        
+                                        <div class="mb-3">
+                                            <p class="text-dark mb-2">${escapeHtml(vuln.description || 'No description available')}</p>
                                         </div>
+                                        
+                                        ${vuln.affected_service || vuln.port || vuln.affected_version ? `
+                                        <div class="mb-3">
+                                            <div class="row">
+                                                ${vuln.affected_service ? `<div class="col-auto"><strong>Service:</strong> <code>${escapeHtml(vuln.affected_service)}</code></div>` : ''}
+                                                ${vuln.port ? `<div class="col-auto"><strong>Port:</strong> <code>${escapeHtml(vuln.port)}</code></div>` : ''}
+                                                ${vuln.affected_version ? `<div class="col-auto"><strong>Version:</strong> <code>${escapeHtml(vuln.affected_version)}</code></div>` : ''}
+                                            </div>
+                                        </div>
+                                        ` : ''}
+                                        
                                         ${mitreHtml}
                                         ${remediationHtml}
                                         ${riskFactorsHtml}
                                     </div>
-                                    <div class="col-md-4 text-end">
-                                        <div class="mb-2">
-                                            <span class="badge bg-${vuln.cvss_score >= 7 ? 'danger' : vuln.cvss_score >= 4 ? 'warning' : 'success'} fs-6">
-                                                CVSS ${vuln.cvss_score || 'N/A'}
-                                            </span>
+                                    <div class="col-md-3 text-end">
+                                        <div class="mb-3">
+                                            <div class="cvss-score-display">
+                                                <div class="h4 mb-1">
+                                                    <span class="badge bg-${vuln.cvss_score >= 9 ? 'danger' : vuln.cvss_score >= 7 ? 'warning' : vuln.cvss_score >= 4 ? 'info' : 'success'} fs-5">
+                                                        ${escapeHtml(vuln.cvss_score) || 'N/A'}
+                                                    </span>
+                                                </div>
+                                                <small class="text-muted">CVSS Score</small>
+                                            </div>
                                         </div>
-                                        <div class="small text-muted">
-                                            ${vuln.patch_available ? '<i class="fas fa-check text-success"></i> Patch Available' : '<i class="fas fa-times text-danger"></i> No Patch'}
+                                        
+                                        <div class="d-flex flex-column gap-2">
+                                            ${vuln.exploit_available ? 
+                                                '<div class="alert alert-danger alert-sm py-1 px-2 mb-0"><i class="fas fa-exclamation-triangle"></i> <small>High Priority</small></div>' : 
+                                                '<div class="alert alert-info alert-sm py-1 px-2 mb-0"><i class="fas fa-info-circle"></i> <small>Standard Priority</small></div>'
+                                            }
                                         </div>
                                     </div>
                                 </div>
@@ -1993,12 +2165,22 @@
                 }
             });
             
-            if (html === '') {
+            html += '</div>';
+            
+            if (html === '<div class="vulnerability-display-container"></div>') {
                 html = '<div class="text-center text-success p-4"><i class="fas fa-shield-check fa-2x mb-3"></i><h6>No Vulnerabilities Detected</h6><p class="text-muted">Great news! No security vulnerabilities were found during the scan.</p></div>';
             }
             
+            // Force update the container
             container.innerHTML = html;
-            console.log('🔍 DEBUG: Vulnerabilities HTML set successfully');
+            console.log('🔍 DEBUG: Vulnerabilities HTML updated successfully. New length:', container.innerHTML.length);
+            
+            // Force a visual refresh to ensure the update is visible
+            container.style.display = 'none';
+            setTimeout(() => {
+                container.style.display = 'block';
+                console.log('🔍 DEBUG: Container visibility refreshed');
+            }, 10);
         }
 
         function displayDetailedPorts(portResults) {
@@ -2232,6 +2414,26 @@
             return colors[risk] || 'secondary';
         }
 
+        function getSeverityBadgeClass(severity) {
+            const classes = {
+                'CRITICAL': 'severity-badge-critical',
+                'HIGH': 'severity-badge-high', 
+                'MEDIUM': 'severity-badge-medium',
+                'LOW': 'severity-badge-low'
+            };
+            return classes[severity] || 'severity-badge-low';
+        }
+
+        function getSeverityColor(severity) {
+            const colors = {
+                'CRITICAL': 'danger',
+                'HIGH': 'warning', 
+                'MEDIUM': 'info',
+                'LOW': 'success'
+            };
+            return colors[severity] || 'secondary';
+        }
+
         function formatTime(seconds) {
             if (seconds < 60) return Math.round(seconds) + 's';
             const minutes = Math.floor(seconds / 60);
@@ -2437,9 +2639,9 @@
                             let html = '<div class="emergency-vuln-display">';
                             vulns.forEach((vuln, idx) => {
                                 html += `<div class="alert alert-warning mb-2">
-                                    <strong>VULNERABILITY ${idx + 1}:</strong> ${vuln.cve_id || 'Unknown'}<br>
-                                    <strong>Severity:</strong> ${vuln.severity || 'Unknown'}<br>
-                                    <strong>Description:</strong> ${vuln.description || 'No description'}
+                                    <strong>VULNERABILITY ${idx + 1}:</strong> ${escapeHtml(vuln.cve_id) || 'Unknown'}<br>
+                                    <strong>Severity:</strong> ${escapeHtml(vuln.severity) || 'Unknown'}<br>
+                                    <strong>Description:</strong> ${escapeHtml(vuln.description) || 'No description'}
                                 </div>`;
                             });
                             html += '</div>';
@@ -2726,10 +2928,10 @@
                     vulns.forEach((vuln, idx) => {
                         html += `
                             <div style="border: 1px solid #ffc107; padding: 8px; margin: 5px 0; background: #fff3cd;">
-                                <strong>VULNERABILITY ${idx + 1}:</strong> ${vuln.cve_id || 'Unknown'}<br>
-                                <strong>Severity:</strong> ${vuln.severity || 'Unknown'}<br>
-                                <strong>Description:</strong> ${vuln.description || 'No description'}<br>
-                                <strong>Port:</strong> ${vuln.port || 'N/A'}
+                                <strong>VULNERABILITY ${idx + 1}:</strong> ${escapeHtml(vuln.cve_id) || 'Unknown'}<br>
+                                <strong>Severity:</strong> ${escapeHtml(vuln.severity) || 'Unknown'}<br>
+                                <strong>Description:</strong> ${escapeHtml(vuln.description) || 'No description'}<br>
+                                <strong>Port:</strong> ${escapeHtml(vuln.port) || 'N/A'}
                             </div>
                         `;
                     });
@@ -2754,6 +2956,29 @@
             directVulnTest();
         }, 1000);
         
+        // Initialize scan tracking when page loads
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log('🔍 DEBUG: Page loaded, starting scan tracking for:', scanId);
+            startScanTracking();
+            
+            // IMMEDIATE: Try to load vulnerability data for completed scans
+            setTimeout(() => {
+                console.log('🔍 DEBUG: Page load - checking for completed scan data');
+                fetch(`/api/scan/${scanId}/detailed`)
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.success && data.data?.results?.vulnerabilities) {
+                            console.log('🔍 DEBUG: Page load - found', data.data.results.vulnerabilities.length, 'vulnerabilities, displaying immediately');
+                            displayDetailedVulnerabilities(data.data.results.vulnerabilities);
+                        } else {
+                            console.log('🔍 DEBUG: Page load - no vulnerability data available yet');
+                        }
+                    })
+                    .catch(error => {
+                        console.log('🔍 DEBUG: Page load - error fetching scan data:', error);
+                    });
+            }, 500);
+        });
     </script>
 </body>
 </html> 
