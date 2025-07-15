@@ -1,0 +1,3 @@
+domain,company_name,contact_email,priority
+example.com,Example Corp,admin@example.com,high
+google.com,Google Inc,contact@google.com,medium 

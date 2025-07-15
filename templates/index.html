@@ -1,0 +1,593 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cyber Insurance Scanner Dashboard</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <link href="/static/css/custom.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        :root {
+            --primary-color: #2c3e50;
+            --secondary-color: #3498db;
+            --success-color: #27ae60;
+            --warning-color: #f39c12;
+            --danger-color: #e74c3c;
+            --dark-color: #34495e;
+        }
+
+        body {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+
+        .dashboard-container {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            border-radius: 15px;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
+            margin: 20px 0;
+        }
+
+        .header-section {
+            background: linear-gradient(135deg, var(--primary-color), var(--dark-color));
+            color: white;
+            padding: 30px;
+            border-radius: 15px 15px 0 0;
+            text-align: center;
+        }
+
+        .scan-form {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+            margin-bottom: 30px;
+        }
+
+        .metric-card {
+            background: white;
+            border-radius: 10px;
+            padding: 20px;
+            text-align: center;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+            transition: transform 0.3s ease;
+            margin-bottom: 20px;
+        }
+
+        .metric-card:hover {
+            box-shadow: 0 8px 25px rgba(0, 0, 0, 0.15);
+        }
+
+        .metric-value {
+            font-size: 2.5rem;
+            font-weight: bold;
+            margin-bottom: 10px;
+        }
+
+        .metric-label {
+            color: #666;
+            font-size: 0.9rem;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .risk-low { color: var(--success-color); }
+        .risk-medium { color: var(--warning-color); }
+        .risk-high { color: var(--danger-color); }
+        .risk-critical { color: #8e44ad; }
+
+        .chart-container {
+            background: white;
+            border-radius: 10px;
+            padding: 20px;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+            margin-bottom: 30px;
+        }
+
+        .chart-container canvas {
+            max-height: 300px !important;
+            height: 300px !important;
+        }
+
+        /* Fix vulnerability trends chart scaling */
+        #vulnChart {
+            height: 300px !important;
+            max-height: 300px !important;
+        }
+
+        #riskChart {
+            height: 300px !important;
+            max-height: 300px !important;
+        }
+
+        .scan-result-card {
+            background: white;
+            border-radius: 10px;
+            padding: 20px;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+            margin-bottom: 40px;
+            border-left: 5px solid var(--secondary-color);
+            clear: both;
+            position: relative;
+            border-bottom: 2px solid #e9ecef;
+            padding-bottom: 30px;
+        }
+
+        .loading-spinner {
+            display: none;
+            text-align: center;
+            padding: 20px;
+        }
+
+        .status-badge {
+            padding: 5px 12px;
+            border-radius: 20px;
+            font-size: 0.8rem;
+            font-weight: bold;
+            text-transform: uppercase;
+        }
+
+        .btn-scan {
+            background: linear-gradient(135deg, var(--secondary-color), #2980b9);
+            border: none;
+            padding: 12px 30px;
+            border-radius: 25px;
+            color: white;
+            font-weight: bold;
+            transition: all 0.3s ease;
+        }
+
+        .btn-scan:hover {
+            background: linear-gradient(135deg, #2980b9, var(--secondary-color));
+            box-shadow: 0 5px 15px rgba(52, 152, 219, 0.4);
+        }
+
+        .vulnerability-item {
+            background: #f8f9fa;
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 10px;
+            border-left: 4px solid #ddd;
+        }
+
+        .vulnerability-critical { border-left-color: #8e44ad; }
+        .vulnerability-high { border-left-color: var(--danger-color); }
+        .vulnerability-medium { border-left-color: var(--warning-color); }
+        .vulnerability-low { border-left-color: var(--success-color); }
+
+        .scan-item {
+            background: #f8f9fa;
+            border-radius: 10px;
+            padding: 20px;
+            margin-bottom: 15px;
+            border-left: 5px solid #dee2e6;
+            transition: all 0.3s ease;
+            position: relative;
+        }
+
+        .scan-item:hover {
+            box-shadow: 0 8px 25px rgba(0, 0, 0, 0.1);
+        }
+
+        .scan-item.active { border-left-color: var(--secondary-color); }
+        .scan-item.completed { border-left-color: var(--success-color); }
+        .scan-item.failed { border-left-color: var(--danger-color); }
+
+        .scan-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+
+        .scan-domain {
+            font-weight: bold;
+            font-size: 1.1rem;
+            color: var(--primary-color);
+        }
+
+        .scan-company {
+            color: #666;
+            font-size: 0.9rem;
+        }
+
+        .scan-status {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-top: 10px;
+        }
+
+        .progress-container {
+            flex: 1;
+            margin: 0 10px;
+        }
+
+        .progress-text {
+            font-size: 0.8rem;
+            color: #666;
+            margin-bottom: 5px;
+        }
+
+        .risk-badge {
+            padding: 4px 8px;
+            border-radius: 12px;
+            font-size: 0.7rem;
+            font-weight: bold;
+            text-transform: uppercase;
+        }
+
+        .risk-low { background-color: #d4edda; color: #155724; }
+        .risk-medium { background-color: #fff3cd; color: #856404; }
+        .risk-high { background-color: #f8d7da; color: #721c24; }
+        .risk-critical { background-color: #e8d5f0; color: #5a1e6b; }
+
+        .scan-actions {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+
+        .btn-view-scan {
+            padding: 6px 12px;
+            font-size: 0.8rem;
+            border-radius: 15px;
+            text-decoration: none;
+            transition: all 0.3s ease;
+        }
+
+        .btn-view-scan:hover {
+            box-shadow: 0 3px 10px rgba(0, 0, 0, 0.2);
+        }
+
+        .scan-timestamp {
+            font-size: 0.8rem;
+            color: #888;
+            margin-top: 5px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container-fluid">
+        <div class="row">
+            <div class="col-12">
+                <div class="dashboard-container">
+                    <!-- Header Section -->
+                    <div class="header-section">
+                        <h1><i class="fas fa-shield-alt"></i> Cyber Insurance Scanner</h1>
+                        <p class="lead">Automated Cybersecurity Risk Assessment for Insurance Companies</p>
+                    </div>
+
+                    <div class="container-fluid p-4">
+                        <!-- Scan Input Form -->
+                        <div class="row">
+                            <div class="col-lg-8 mx-auto">
+                                <div class="scan-form">
+                                    <h3><i class="fas fa-search"></i> New Security Scan</h3>
+                                    <form id="scanForm">
+                                        <div class="row">
+                                            <div class="col-md-6">
+                                                <div class="mb-3">
+                                                    <label for="domain" class="form-label">Domain/Website URL</label>
+                                                    <input type="text" class="form-control" id="domain" 
+                                                           placeholder="example.com" required>
+                                                </div>
+                                            </div>
+                                            <div class="col-md-6">
+                                                <div class="mb-3">
+                                                    <label for="companyName" class="form-label">Company Name</label>
+                                                    <input type="text" class="form-control" id="companyName" 
+                                                           placeholder="Company Name" required>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div class="row">
+                                            <div class="col-md-6">
+                                                <div class="mb-3">
+                                                    <label for="scanType" class="form-label">Scan Type</label>
+                                                    <select class="form-select" id="scanType">
+                                                        <option value="quick">Quick Scan (< 1 min)</option>
+                                                        <option value="full">Full Scan (~ 5 min)</option>
+                                                    </select>
+                                                </div>
+                                            </div>
+                                            <div class="col-md-6 d-flex align-items-end">
+                                                <button type="submit" class="btn btn-scan w-100">
+                                                    <i class="fas fa-play"></i> Start Scan
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </form>
+                                    
+                                    <div class="loading-spinner" id="loadingSpinner">
+                                        <div class="spinner-border text-primary" role="status">
+                                            <span class="visually-hidden">Scanning...</span>
+                                        </div>
+                                        <p class="mt-2">Scanning in progress...</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Dashboard Metrics -->
+                        <div class="row" id="dashboardMetrics">
+                            <div class="col-lg-3 col-md-6">
+                                <div class="metric-card">
+                                    <div class="metric-value" id="totalScans">0</div>
+                                    <div class="metric-label">Total Scans</div>
+                                </div>
+                            </div>
+                            <div class="col-lg-3 col-md-6">
+                                <div class="metric-card">
+                                    <div class="metric-value" id="successRate">0%</div>
+                                    <div class="metric-label">Success Rate</div>
+                                </div>
+                            </div>
+                            <div class="col-lg-3 col-md-6">
+                                <div class="metric-card">
+                                    <div class="metric-value" id="totalVulns">0</div>
+                                    <div class="metric-label">Vulnerabilities</div>
+                                </div>
+                            </div>
+                            <div class="col-lg-3 col-md-6">
+                                <div class="metric-card">
+                                    <div class="metric-value" id="avgRisk">Low</div>
+                                    <div class="metric-label">Average Risk</div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- All Scans Section -->
+                        <div class="row">
+                            <div class="col-12">
+                                <div class="chart-container">
+                                    <div class="d-flex justify-content-between align-items-center mb-3">
+                                        <h4><i class="fas fa-tasks"></i> All Scans</h4>
+                                        <div class="btn-group">
+                                            <button class="btn btn-outline-primary btn-sm" onclick="refreshAllScans()">
+                                                <i class="fas fa-sync-alt"></i> Refresh
+                                            </button>
+                                            <button class="btn btn-outline-success btn-sm" onclick="exportAllScans()">
+                                                <i class="fas fa-download"></i> Export All
+                                            </button>
+                                            <button class="btn btn-outline-danger btn-sm" onclick="clearAllScans()">
+                                                <i class="fas fa-trash-alt"></i> Clear All
+                                            </button>
+                                        </div>
+                                    </div>
+                                    <div id="allScansContainer">
+                                        <p class="text-muted text-center">Loading scans...</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Charts Row -->
+                        <div class="row">
+                            <div class="col-lg-6">
+                                <div class="chart-container">
+                                    <h4><i class="fas fa-chart-pie"></i> Risk Distribution</h4>
+                                    <canvas id="riskChart" width="400" height="300"></canvas>
+                                </div>
+                            </div>
+                            <div class="col-lg-6">
+                                <div class="chart-container">
+                                    <h4><i class="fas fa-chart-bar"></i> Vulnerability Trends</h4>
+                                    <canvas id="vulnChart" width="400" height="300"></canvas>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Recent Scans -->
+                        <div class="row">
+                            <div class="col-12">
+                                <div class="chart-container">
+                                    <div class="d-flex justify-content-between align-items-center mb-3">
+                                        <h4><i class="fas fa-history"></i> Recent Scan Results</h4>
+                                        <button class="btn btn-outline-primary btn-sm" onclick="refreshResults()">
+                                            <i class="fas fa-sync-alt"></i> Refresh
+                                        </button>
+                                    </div>
+                                    <div id="scanResults">
+                                        <p class="text-muted text-center">No scan results available. Start a new scan to see results here.</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Executive Summary -->
+                        <div class="row">
+                            <div class="col-12">
+                                <div class="chart-container">
+                                    <h4><i class="fas fa-chart-line"></i> Executive Summary</h4>
+                                    <div id="executiveSummary">
+                                        <p class="text-muted">Executive summary will appear here after scans are completed.</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Domain Summary -->
+                        <div class="row">
+                            <div class="col-12">
+                                <div class="chart-container">
+                                    <div class="d-flex justify-content-between align-items-center mb-3">
+                                        <h4><i class="fas fa-shield-alt"></i> Domain Security Summary</h4>
+                                        <button class="btn btn-outline-primary btn-sm" onclick="refreshDomainSummary()">
+                                            <i class="fas fa-sync-alt"></i> Refresh
+                                        </button>
+                                    </div>
+                                    <div id="domainSummary">
+                                        <p class="text-muted">Domain security summary will appear here after scans are completed.</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Apollo.io Integration Section -->
+                        <div class="row mb-5">
+                            <div class="col-12">
+                                <div class="chart-container" style="border: 2px solid #007bff; background: linear-gradient(135deg, #f8f9ff 0%, #e8f4ff 100%);">
+                                    <div class="d-flex justify-content-between align-items-center mb-3" style="background: #007bff; color: white; margin: -20px -20px 20px -20px; padding: 15px 20px;">
+                                        <h4 class="mb-0"><i class="fas fa-rocket"></i> Apollo.io Integration</h4>
+                                        <small>Import Apollo.io company exports</small>
+                                    </div>
+                                    <div class="row">
+                                        <div class="col-md-8">
+                                            <div class="mb-3">
+                                                <label for="apolloCsvFile" class="form-label fw-bold">Upload Apollo.io CSV Export</label>
+                                                <input type="file" class="form-control" id="apolloCsvFile" accept=".csv" 
+                                                       onchange="uploadApolloFile(this)">
+                                                <div class="form-text">Upload your Apollo.io company export CSV for enriched bulk scanning</div>
+                                            </div>
+                                        </div>
+                                        <div class="col-md-4">
+                                            <div class="mb-3">
+                                                <label for="apolloScanType" class="form-label">Scan Type</label>
+                                                <select class="form-select" id="apolloScanType">
+                                                    <option value="quick">Quick Scan (1-2 min/domain)</option>
+                                                    <option value="full" selected>Full Scan (2-4 min/domain)</option>
+                                                </select>
+                                            </div>
+                                            <div class="mb-3">
+                                                <label for="apolloConcurrency" class="form-label">Concurrency Level</label>
+                                                <select class="form-select" id="apolloConcurrency">
+                                                    <option value="4">Conservative (4 parallel)</option>
+                                                    <option value="8" selected>Balanced (8 parallel)</option>
+                                                    <option value="12">Aggressive (12 parallel)</option>
+                                                    <option value="16">Maximum (16 parallel)</option>
+                                                </select>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    
+                                    <div class="d-flex gap-2 mb-3">
+                                        <button class="btn btn-success" onclick="startApolloScan()" id="apolloScanBtn" disabled>
+                                            <i class="fas fa-play"></i> Start Apollo Bulk Scan
+                                        </button>
+                                        <button class="btn btn-info" onclick="showApolloPreview()" id="apolloPreviewBtn" disabled>
+                                            <i class="fas fa-eye"></i> Preview Data
+                                        </button>
+                                        <button class="btn btn-outline-warning" onclick="resetApolloData()" id="apolloResetBtn" disabled>
+                                            <i class="fas fa-trash"></i> Clear Data
+                                        </button>
+                                    </div>
+                                    
+                                    <!-- Apollo Status -->
+                                    <div id="apolloStatus" class="mt-3">
+                                        <div class="alert alert-info">
+                                            <i class="fas fa-info-circle"></i> No Apollo data uploaded. Upload your Apollo.io CSV export to get started.
+                                        </div>
+                                    </div>
+                                    
+                                    <!-- Apollo Data Preview -->
+                                    <div id="apolloPreview" style="display: none;" class="mt-4">
+                                        <h6><i class="fas fa-table"></i> Apollo Data Preview</h6>
+                                        <div class="table-responsive">
+                                            <table class="table table-sm table-striped table-hover" id="apolloPreviewTable">
+                                                <!-- Apollo data will be populated here -->
+                                            </table>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Manual Bulk Scanning Section -->
+                        <div class="row mb-5">
+                            <div class="col-12">
+                                <div class="chart-container">
+                                    <div class="d-flex justify-content-between align-items-center mb-3">
+                                        <h4><i class="fas fa-upload"></i> Bulk Domain Scanning</h4>
+                                        <button class="btn btn-sm btn-outline-info" onclick="showCsvFormat()">
+                                            <i class="fas fa-info-circle"></i> CSV Format
+                                        </button>
+                                    </div>
+                                    <div class="row">
+                                        <div class="col-md-8">
+                                            <div class="mb-3">
+                                                <label for="csvFileInput" class="form-label">Upload CSV File</label>
+                                                <input type="file" class="form-control" id="csvFileInput" accept=".csv" 
+                                                       onchange="validateCsvFile(this)">
+                                                <div class="form-text">
+                                                    Upload a CSV file with domains to scan. Max 50 domains per upload.
+                                                </div>
+                                            </div>
+                                            
+                                            <div class="row">
+                                                <div class="col-md-8">
+                                                    <div class="mb-3">
+                                                        <label for="bulkScanType" class="form-label">Scan Type</label>
+                                                        <select class="form-select" id="bulkScanType">
+                                                            <option value="quick">Quick Scan (1-2 minutes per domain)</option>
+                                                            <option value="full" selected>Full Scan (2-4 minutes per domain)</option>
+                                                        </select>
+                                                    </div>
+                                                </div>
+                                                <div class="col-md-4">
+                                                    <div class="mb-3">
+                                                        <label for="concurrencyLevel" class="form-label">
+                                                            Concurrency 
+                                                            <small class="text-muted">(parallel)</small>
+                                                        </label>
+                                                        <select class="form-select" id="concurrencyLevel">
+                                                            <option value="4">Conservative (4)</option>
+                                                            <option value="8" selected>Balanced (8)</option>
+                                                            <option value="12">Aggressive (12)</option>
+                                                            <option value="16">Maximum (16)</option>
+                                                        </select>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            
+                                            <div class="d-flex gap-2">
+                                                <button class="btn btn-primary" onclick="startBulkScan()" id="bulkScanBtn" disabled>
+                                                    <i class="fas fa-play"></i> Start Bulk Scan
+                                                </button>
+                                                <button class="btn btn-outline-secondary" onclick="downloadCsvTemplate()">
+                                                    <i class="fas fa-download"></i> Download Template
+                                                </button>
+                                                <button class="btn btn-outline-warning" onclick="resetBulkScanState()" title="Reset bulk scan form">
+                                                    <i class="fas fa-redo"></i> Reset
+                                                </button>
+                                            </div>
+                                        </div>
+                                        
+                                        <div class="col-md-4">
+                                            <div class="card bg-light">
+                                                <div class="card-body">
+                                                    <h6 class="card-title">Bulk Scan Status</h6>
+                                                    <div id="bulkScanStatus">
+                                                        <p class="text-muted mb-0">No bulk scan running</p>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    
+                                    <!-- CSV Preview -->
+                                    <div id="csvPreview" style="display: none;" class="mt-4">
+                                        <h6>CSV Preview</h6>
+                                        <div class="table-responsive">
+                                            <table class="table table-sm table-striped" id="csvPreviewTable">
+                                                <!-- CSV content will be populated here -->
+                                            </table>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="/static/js/dashboard.js"></script>
+</body>
+</html> 

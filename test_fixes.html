@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Vulnerability Display Test</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .test-section { margin: 20px 0; padding: 15px; border: 1px solid #ccc; border-radius: 5px; }
+        .vulnerability-item { background: #f8f9fa; border: 1px solid #e9ecef; margin: 10px 0; padding: 10px; border-radius: 5px; }
+        button { padding: 10px 15px; margin: 5px; background: #007bff; color: white; border: none; border-radius: 3px; cursor: pointer; }
+        button:hover { background: #0056b3; }
+        .alert { padding: 15px; margin: 10px 0; border-radius: 5px; }
+        .alert-warning { background: #fff3cd; border: 1px solid #ffeaa7; color: #856404; }
+        .alert-success { background: #d4edda; border: 1px solid #c3e6cb; color: #155724; }
+    </style>
+</head>
+<body>
+    <h1>Vulnerability Display Test</h1>
+    
+    <div class="test-section">
+        <h3>API Test</h3>
+        <button onclick="testAPI()">Test API Response</button>
+        <div id="apiResult"></div>
+    </div>
+    
+    <div class="test-section">
+        <h3>Vulnerability Display Test</h3>
+        <button onclick="testVulnDisplay()">Test Vulnerability Display</button>
+        <div id="vulnerabilitiesDetails">
+            <p class="text-muted">No vulnerabilities displayed yet...</p>
+        </div>
+    </div>
+    
+    <div class="test-section">
+        <h3>Direct Scanner Page Test</h3>
+        <p>Scanner page: <a href="http://localhost:8000/scan/59b7736c-3d3c-4d5b-9e05-7dc5bcedc594" target="_blank">Open Scan Details</a></p>
+        <p><strong>Tests to perform:</strong></p>
+        <ol>
+            <li>Check that status shows "COMPLETED" (not "initializing")</li>
+            <li>Check that timer shows ~13.5 minutes (810 seconds)</li>
+            <li>Check that Security Vulnerabilities section shows 10 vulnerabilities</li>
+        </ol>
+        <p><strong>Browser Console Commands:</strong></p>
+        <ul>
+            <li><code>autoFixDisplay()</code> - Auto-fix all display issues</li>
+            <li><code>forceRefreshVulnerabilities()</code> - Force refresh vulnerabilities</li>
+            <li><code>emergencyVulnDisplay()</code> - Emergency vulnerability display</li>
+        </ul>
+    </div>
+
+    <script>
+        const scanId = '59b7736c-3d3c-4d5b-9e05-7dc5bcedc594';
+        
+        async function testAPI() {
+            try {
+                const response = await fetch(`http://localhost:8000/api/scan/${scanId}/detailed`);
+                const data = await response.json();
+                
+                const result = document.getElementById('apiResult');
+                result.innerHTML = `
+                    <div class="alert alert-success">
+                        <strong>API Response:</strong><br>
+                        Status: ${data.data.status}<br>
+                        Vulnerabilities: ${data.data.results.vulnerabilities.length}<br>
+                        Has Progress: ${!!data.data.progress}<br>
+                        First Vulnerability: ${data.data.results.vulnerabilities[0]?.cve_id || 'None'}
+                    </div>
+                `;
+            } catch (error) {
+                document.getElementById('apiResult').innerHTML = `
+                    <div class="alert alert-warning">
+                        <strong>Error:</strong> ${error.message}
+                    </div>
+                `;
+            }
+        }
+        
+        async function testVulnDisplay() {
+            try {
+                const response = await fetch(`http://localhost:8000/api/scan/${scanId}/detailed`);
+                const data = await response.json();
+                
+                if (data.success && data.data.results && data.data.results.vulnerabilities) {
+                    displayDetailedVulnerabilities(data.data.results.vulnerabilities);
+                }
+            } catch (error) {
+                console.error('Error testing vulnerability display:', error);
+            }
+        }
+        
+        // Simplified vulnerability display function for testing
+        function displayDetailedVulnerabilities(vulnerabilities) {
+            const container = document.getElementById('vulnerabilitiesDetails');
+            
+            if (!vulnerabilities || vulnerabilities.length === 0) {
+                container.innerHTML = '<div class="alert alert-success">No vulnerabilities found</div>';
+                return;
+            }
+            
+            let html = `<div class="alert alert-warning">Found ${vulnerabilities.length} vulnerabilities:</div>`;
+            
+            vulnerabilities.forEach((vuln, idx) => {
+                html += `
+                    <div class="vulnerability-item">
+                        <strong>VULNERABILITY ${idx + 1}:</strong> ${vuln.cve_id || 'Unknown'}<br>
+                        <strong>Severity:</strong> ${vuln.severity || 'Unknown'}<br>
+                        <strong>Description:</strong> ${vuln.description || 'No description'}<br>
+                        <strong>Port:</strong> ${vuln.port || 'N/A'}
+                    </div>
+                `;
+            });
+            
+            container.innerHTML = html;
+        }
+        
+        // Auto-test on page load
+        window.addEventListener('load', () => {
+            setTimeout(testAPI, 1000);
+        });
+    </script>
+</body>
+</html> 

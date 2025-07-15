@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test Vulnerability Display</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+</head>
+<body>
+    <div class="container mt-5">
+        <h1>Test Vulnerability Display</h1>
+        <div class="row">
+            <div class="col-md-12">
+                <div class="card">
+                    <div class="card-header">
+                        <h5>Security Vulnerabilities</h5>
+                    </div>
+                    <div class="card-body">
+                        <div id="vulnerabilitiesDetails">
+                            <div class="text-center">
+                                <div class="spinner-border" role="status">
+                                    <span class="visually-hidden">Loading...</span>
+                                </div>
+                                <p>Loading vulnerabilities...</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Mock vulnerability data - same structure as API returns
+        const testVulnerabilities = [
+            {
+                "cve_id": "WEB-X-FRAME-OPTIONS",
+                "severity": "LOW",
+                "cvss_score": 3.7,
+                "description": "Missing X-Frame-Options header allows clickjacking attacks",
+                "affected_service": "HTTP",
+                "affected_version": "Apache/2.4.41",
+                "port": 80,
+                "exploit_available": false,
+                "patch_available": true,
+                "discovered_at": "2025-07-13 08:50:00"
+            },
+            {
+                "cve_id": "WEB-X-CONTENT-TYPE-OPTIONS", 
+                "severity": "LOW",
+                "cvss_score": 3.1,
+                "description": "Missing X-Content-Type-Options header allows MIME type sniffing",
+                "affected_service": "HTTP",
+                "affected_version": "Apache/2.4.41",
+                "port": 80,
+                "exploit_available": false,
+                "patch_available": true,
+                "discovered_at": "2025-07-13 08:50:00"
+            },
+            {
+                "cve_id": "WEB-HSTS-MISSING",
+                "severity": "MEDIUM",
+                "cvss_score": 5.4,
+                "description": "Missing Strict-Transport-Security header allows protocol downgrade attacks",
+                "affected_service": "HTTPS",
+                "affected_version": "Apache/2.4.41",
+                "port": 443,
+                "exploit_available": false,
+                "patch_available": true,
+                "discovered_at": "2025-07-13 08:50:00"
+            },
+            {
+                "cve_id": "WEB-CSP-MISSING",
+                "severity": "LOW",
+                "cvss_score": 3.7,
+                "description": "Missing Content-Security-Policy header allows XSS attacks",
+                "affected_service": "HTTP",
+                "affected_version": "Apache/2.4.41",
+                "port": 80,
+                "exploit_available": false,
+                "patch_available": true,
+                "discovered_at": "2025-07-13 08:50:00"
+            },
+            {
+                "cve_id": "WEB-HTTP-INSECURE",
+                "severity": "MEDIUM",
+                "cvss_score": 5.0,
+                "description": "Unencrypted HTTP connection detected for sensitive content",
+                "affected_service": "HTTP",
+                "affected_version": "Apache/2.4.41",
+                "port": 80,
+                "exploit_available": false,
+                "patch_available": true,
+                "discovered_at": "2025-07-13 08:50:00"
+            }
+        ];
+
+        // Same display logic as the main application
+        function displayVulnerabilities(vulnerabilities) {
+            const vulnerabilitiesContainer = document.getElementById('vulnerabilitiesDetails');
+            
+            if (!vulnerabilities || vulnerabilities.length === 0) {
+                vulnerabilitiesContainer.innerHTML = '<p class="text-muted">No vulnerabilities found yet...</p>';
+                return;
+            }
+
+            console.log('🔍 TEST: Displaying', vulnerabilities.length, 'vulnerabilities');
+
+            // Group vulnerabilities by severity
+            const grouped = vulnerabilities.reduce((acc, vuln) => {
+                const severity = vuln.severity || 'UNKNOWN';
+                if (!acc[severity]) {
+                    acc[severity] = [];
+                }
+                acc[severity].push(vuln);
+                return acc;
+            }, {});
+
+            let html = '<div class="vulnerability-groups">';
+            const severityOrder = ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW'];
+
+            // Function to get severity badge class
+            function getSeverityClass(severity) {
+                const classes = {
+                    'CRITICAL': 'danger',
+                    'HIGH': 'danger',
+                    'MEDIUM': 'warning',
+                    'LOW': 'info'
+                };
+                return classes[severity] || 'secondary';
+            }
+
+            // Display each severity group
+            for (const severity of severityOrder) {
+                if (grouped[severity]) {
+                    html += `
+                        <div class="severity-group mb-4">
+                            <h6 class="text-${getSeverityClass(severity)}">
+                                <i class="fas fa-exclamation-triangle"></i> 
+                                ${severity} Severity (${grouped[severity].length})
+                            </h6>
+                            <div class="row">
+                    `;
+                    
+                    for (const vuln of grouped[severity]) {
+                        html += `
+                            <div class="col-md-6 mb-3">
+                                <div class="card border-${getSeverityClass(severity)}">
+                                    <div class="card-body">
+                                        <h6 class="card-title">
+                                            <span class="badge bg-${getSeverityClass(severity)}">${vuln.severity}</span>
+                                            ${vuln.cve_id || 'N/A'}
+                                        </h6>
+                                        <p class="card-text">${vuln.description || 'No description available'}</p>
+                                        <div class="vulnerability-details">
+                                            <small class="text-muted">
+                                                <strong>Service:</strong> ${vuln.affected_service || 'N/A'}<br>
+                                                <strong>Port:</strong> ${vuln.port || 'N/A'}<br>
+                                                <strong>Version:</strong> ${vuln.affected_version || 'N/A'}<br>
+                                                <strong>CVSS Score:</strong> ${vuln.cvss_score || 'N/A'}<br>
+                                                <strong>Exploit Available:</strong> ${vuln.exploit_available ? 'Yes' : 'No'}<br>
+                                                <strong>Patch Available:</strong> ${vuln.patch_available ? 'Yes' : 'No'}<br>
+                                                <strong>Discovered:</strong> ${vuln.discovered_at || 'N/A'}
+                                            </small>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        `;
+                    }
+                    
+                    html += `
+                            </div>
+                        </div>
+                    `;
+                }
+            }
+
+            html += '</div>';
+            vulnerabilitiesContainer.innerHTML = html;
+        }
+
+        // Test the display function
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log('🔍 TEST: Testing vulnerability display with', testVulnerabilities.length, 'vulnerabilities');
+            
+            // Simulate loading delay
+            setTimeout(() => {
+                displayVulnerabilities(testVulnerabilities);
+            }, 1000);
+        });
+    </script>
+</body>
+</html> 

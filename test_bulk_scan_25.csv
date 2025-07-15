@@ -1,0 +1,26 @@
+domain,company_name,contact_email,priority
+example.com,Example Corporation,security@example.com,high
+google.com,Google Inc,contact@google.com,high
+microsoft.com,Microsoft Corporation,security@microsoft.com,high
+apple.com,Apple Inc,security@apple.com,high
+amazon.com,Amazon Inc,security@amazon.com,high
+facebook.com,Facebook Inc,security@facebook.com,medium
+twitter.com,Twitter Inc,security@twitter.com,medium
+linkedin.com,LinkedIn Corporation,security@linkedin.com,medium
+github.com,GitHub Inc,security@github.com,medium
+stackoverflow.com,Stack Overflow,security@stackoverflow.com,medium
+reddit.com,Reddit Inc,security@reddit.com,low
+youtube.com,YouTube LLC,security@youtube.com,low
+instagram.com,Instagram Inc,security@instagram.com,low
+netflix.com,Netflix Inc,security@netflix.com,low
+spotify.com,Spotify AB,security@spotify.com,low
+dropbox.com,Dropbox Inc,security@dropbox.com,medium
+slack.com,Slack Technologies,security@slack.com,medium
+zoom.us,Zoom Video Communications,security@zoom.us,high
+atlassian.com,Atlassian Corporation,security@atlassian.com,medium
+salesforce.com,Salesforce Inc,security@salesforce.com,high
+adobe.com,Adobe Inc,security@adobe.com,medium
+oracle.com,Oracle Corporation,security@oracle.com,high
+ibm.com,IBM Corporation,security@ibm.com,high
+cisco.com,Cisco Systems,security@cisco.com,high
+vmware.com,VMware Inc,security@vmware.com,medium 

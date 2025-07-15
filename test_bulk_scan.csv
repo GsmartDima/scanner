@@ -1,0 +1,5 @@
+domain,company_name,contact_email,priority
+example.com,Example Corporation,security@example.com,high
+testsite.org,Test Organization,admin@testsite.org,medium
+demo.net,Demo Company,,low
+google.com,Google Inc,contact@google.com,high 
