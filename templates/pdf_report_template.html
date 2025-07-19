@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Cyber Threat Analysis Report</title>
+    <style>
+        /* PDF-optimized styles for WeasyPrint */
+        @page {
+            size: A4;
+            margin: 2cm;
+            @bottom-center {
+                content: "Page " counter(page) " of " counter(pages);
+                font-size: 10pt;
+                color: #666;
+            }
+        }
+        
+        body {
+            font-family: 'Arial', 'Helvetica', sans-serif;
+            font-size: 11pt;
+            line-height: 1.4;
+            color: #333;
+            background: white;
+        }
+        
+        .header {
+            text-align: center;
+            margin-bottom: 30pt;
+            padding: 20pt;
+            border-bottom: 3pt solid #dc3545;
+        }
+        
+        .logo {
+            font-size: 24pt;
+            font-weight: bold;
+            color: #dc3545;
+            margin-bottom: 10pt;
+        }
+        
+        .report-title {
+            font-size: 18pt;
+            font-weight: bold;
+            color: #333;
+            margin-bottom: 5pt;
+        }
+        
+        .company-info {
+            font-size: 14pt;
+            color: #666;
+        }
+        
+        .section {
+            margin: 20pt 0;
+            page-break-inside: avoid;
+        }
+        
+        .section-title {
+            font-size: 16pt;
+            font-weight: bold;
+            color: #dc3545;
+            border-bottom: 1pt solid #dc3545;
+            padding-bottom: 5pt;
+            margin-bottom: 15pt;
+        }
+        
+        .risk-summary {
+            background: #f8f9fa;
+            padding: 15pt;
+            border-left: 4pt solid #dc3545;
+            margin: 15pt 0;
+        }
+        
+        .risk-score {
+            font-size: 24pt;
+            font-weight: bold;
+            color: #dc3545;
+            text-align: center;
+        }
+        
+        .risk-level {
+            font-size: 14pt;
+            text-align: center;
+            margin-top: 5pt;
+        }
+        
+        .critical { color: #dc3545; }
+        .high { color: #fd7e14; }
+        .medium { color: #ffc107; }
+        .low { color: #28a745; }
+        
+        .vulnerability-list {
+            margin: 10pt 0;
+        }
+        
+        .vulnerability-item {
+            margin: 8pt 0;
+            padding: 10pt;
+            border: 1pt solid #dee2e6;
+            border-radius: 3pt;
+        }
+        
+        .vuln-header {
+            font-weight: bold;
+            margin-bottom: 5pt;
+        }
+        
+        .vuln-severity {
+            display: inline-block;
+            padding: 2pt 6pt;
+            border-radius: 2pt;
+            color: white;
+            font-size: 9pt;
+            font-weight: bold;
+        }
+        
+        .severity-critical { background: #dc3545; }
+        .severity-high { background: #fd7e14; }
+        .severity-medium { background: #ffc107; color: #333; }
+        .severity-low { background: #28a745; }
+        
+        .two-column {
+            display: table;
+            width: 100%;
+            margin: 10pt 0;
+        }
+        
+        .column {
+            display: table-cell;
+            width: 50%;
+            vertical-align: top;
+            padding: 5pt;
+        }
+        
+        .stats-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 10pt 0;
+        }
+        
+        .stats-table th,
+        .stats-table td {
+            padding: 8pt;
+            border: 1pt solid #dee2e6;
+            text-align: left;
+        }
+        
+        .stats-table th {
+            background: #f8f9fa;
+            font-weight: bold;
+        }
+        
+        .recommendations {
+            background: #e7f3ff;
+            padding: 15pt;
+            border-left: 4pt solid #007bff;
+            margin: 15pt 0;
+        }
+        
+        .page-break {
+            page-break-before: always;
+        }
+        
+        .footer-info {
+            margin-top: 30pt;
+            padding-top: 15pt;
+            border-top: 1pt solid #dee2e6;
+            font-size: 9pt;
+            color: #666;
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+    <!-- Header -->
+    <div class="header">
+        <div class="logo">MindCypher Security</div>
+        <div class="report-title">Cyber Threat Analysis Report</div>
+        <div class="company-info">{{ company_name }} - {{ domain }}</div>
+        <div class="company-info">Generated: {{ scan_date }}</div>
+    </div>
+
+    <!-- Executive Summary -->
+    <div class="section">
+        <div class="section-title">Executive Summary</div>
+        <div class="risk-summary">
+            <div class="two-column">
+                <div class="column">
+                    <div class="risk-score">{{ risk_score }}/100</div>
+                    <div class="risk-level {{ risk_category }}">{{ risk_category_display }} Risk</div>
+                </div>
+                <div class="column">
+                    <p><strong>Total Vulnerabilities:</strong> {{ total_vulnerabilities }}</p>
+                    <p><strong>Assets Scanned:</strong> {{ total_assets }}</p>
+                    <p><strong>Scan Duration:</strong> {{ scan_duration }}</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Vulnerability Breakdown -->
+    <div class="section">
+        <div class="section-title">Security Assessment Results</div>
+        
+        <table class="stats-table">
+            <tr>
+                <th>Severity Level</th>
+                <th>Count</th>
+                <th>Percentage</th>
+            </tr>
+            <tr>
+                <td><span class="vuln-severity severity-critical">CRITICAL</span></td>
+                <td>{{ critical_count }}</td>
+                <td>{{ critical_percentage }}%</td>
+            </tr>
+            <tr>
+                <td><span class="vuln-severity severity-high">HIGH</span></td>
+                <td>{{ high_count }}</td>
+                <td>{{ high_percentage }}%</td>
+            </tr>
+            <tr>
+                <td><span class="vuln-severity severity-medium">MEDIUM</span></td>
+                <td>{{ medium_count }}</td>
+                <td>{{ medium_percentage }}%</td>
+            </tr>
+            <tr>
+                <td><span class="vuln-severity severity-low">LOW</span></td>
+                <td>{{ low_count }}</td>
+                <td>{{ low_percentage }}%</td>
+            </tr>
+        </table>
+    </div>
+
+    <!-- Detailed Vulnerabilities -->
+    {% if vulnerabilities %}
+    <div class="section page-break">
+        <div class="section-title">Detailed Vulnerability Analysis</div>
+        <div class="vulnerability-list">
+            {% for vuln in vulnerabilities %}
+            <div class="vulnerability-item">
+                <div class="vuln-header">
+                    <span class="vuln-severity severity-{{ vuln.severity_lower }}">{{ vuln.severity }}</span>
+                    {{ vuln.cve_id }} - {{ vuln.title }}
+                </div>
+                <p><strong>Affected Service:</strong> {{ vuln.affected_service }} (Port {{ vuln.port }})</p>
+                <p><strong>CVSS Score:</strong> {{ vuln.cvss_score }}</p>
+                <p><strong>Description:</strong> {{ vuln.description }}</p>
+                {% if vuln.remediation %}
+                <p><strong>Remediation:</strong> {{ vuln.remediation }}</p>
+                {% endif %}
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Security Recommendations -->
+    <div class="section">
+        <div class="section-title">Security Recommendations</div>
+        <div class="recommendations">
+            <h4>Immediate Actions Required:</h4>
+            <ul>
+                {% for rec in priority_recommendations %}
+                <li>{{ rec }}</li>
+                {% endfor %}
+            </ul>
+            
+            <h4>Medium-term Improvements:</h4>
+            <ul>
+                {% for rec in general_recommendations %}
+                <li>{{ rec }}</li>
+                {% endfor %}
+            </ul>
+        </div>
+    </div>
+
+    <!-- Asset Information -->
+    {% if assets %}
+    <div class="section page-break">
+        <div class="section-title">Discovered Assets</div>
+        <table class="stats-table">
+            <tr>
+                <th>Asset</th>
+                <th>Type</th>
+                <th>Port</th>
+                <th>Status</th>
+            </tr>
+            {% for asset in assets %}
+            <tr>
+                <td>{{ asset.subdomain or asset.ip_address }}</td>
+                <td>{{ asset.protocol }}</td>
+                <td>{{ asset.port }}</td>
+                <td>Active</td>
+            </tr>
+            {% endfor %}
+        </table>
+    </div>
+    {% endif %}
+
+    <!-- Footer -->
+    <div class="footer-info">
+        This report was generated by MindCypher Security Scanner<br>
+        Report ID: {{ scan_id }} | Confidential and Proprietary
+    </div>
+</body>
+</html> 

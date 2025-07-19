@@ -7,6 +7,13 @@ from pydantic_settings import BaseSettings
 from pydantic import validator
 from pathlib import Path
 
+# Load environment variables from .env file
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass  # python-dotenv not installed, environment variables should be set manually
+
 
 class Settings(BaseSettings):
     """Application settings with environment variable support"""
@@ -73,6 +80,11 @@ class Settings(BaseSettings):
     ssl_risk_weight: float = 0.1
     service_risk_weight: float = 0.1
     
+    # OpenAI Configuration for Enhanced Report Generation
+    openai_api_key: str = ""
+    openai_model: str = "gpt-4o-mini"
+    openai_enabled: bool = False
+    
     @validator('upload_dir', 'report_dir', 'log_dir')
     def create_directories(cls, v):
         """Create directories if they don't exist"""
@@ -106,6 +118,11 @@ class Settings(BaseSettings):
             else:
                 ports.append(int(part))
         return sorted(list(set(ports)))
+    
+    @property
+    def enhanced_reports_enabled(self) -> bool:
+        """Check if enhanced AI reports are enabled and configured"""
+        return self.openai_enabled and bool(self.openai_api_key.strip())
     
     class Config:
         env_file = ".env"
@@ -151,3 +168,5 @@ CVE_SEVERITY_SCORES = {
     "LOW": 2,
     "NONE": 0
 } 
+
+ 

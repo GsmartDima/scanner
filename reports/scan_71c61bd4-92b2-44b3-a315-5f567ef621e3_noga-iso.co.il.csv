@@ -1,0 +1,54 @@
+Cyber Insurance Scanner Report
+Domain,noga-iso.co.il
+Company,ss
+Scan Date,2025-07-15 18:05:50.012539
+Scan Status,completed
+Risk Score,52.79166666666667
+Risk Category,high
+
+DISCOVERED ASSETS
+Subdomain,IP Address,Protocol,Port,Title,Technologies
+noga-iso.co.il,13.74.164.25,http,80,Document Moved,IIS
+noga-iso.co.il,13.74.164.25,https,443,Document Moved,IIS
+www.noga-iso.co.il,13.107.246.40,http,80,Service unavailable,
+www.noga-iso.co.il,13.107.246.40,https,443,Service unavailable,
+ffr.noga-iso.co.il,13.107.246.40,http,80,Page not found,
+ffr.noga-iso.co.il,13.107.246.40,https,443,Service unavailable,
+wcms.noga-iso.co.il,13.107.246.40,http,80,Service unavailable,
+wcms.noga-iso.co.il,13.107.246.40,https,443,Service unavailable,
+ffr-api.noga-iso.co.il,13.107.246.40,http,80,Page not found,
+ffr-api.noga-iso.co.il,13.107.246.40,https,443,Service unavailable,
+wportal.noga-iso.co.il,13.107.246.40,http,80,Service unavailable,
+wportal.noga-iso.co.il,13.107.246.40,https,443,Service unavailable,
+Apim-api.noga-iso.co.il,13.107.246.40,http,80,,
+Apim-api.noga-iso.co.il,13.107.246.40,https,443,,
+apim-api.noga-iso.co.il,13.107.246.40,http,80,,
+apim-api.noga-iso.co.il,13.107.246.40,https,443,,
+campaign.noga-iso.co.il,13.107.246.40,http,80,,
+campaign.noga-iso.co.il,13.107.246.40,https,443,Noga,Google Analytics
+www-prod.noga-iso.co.il,13.107.246.40,http,80,Page not found,
+www-prod.noga-iso.co.il,13.107.246.40,https,443,Service unavailable,
+www-test.noga-iso.co.il,13.107.246.40,http,80,Service unavailable,
+www-test.noga-iso.co.il,13.107.246.40,https,443,Page not found,
+apim-site.noga-iso.co.il,13.107.246.40,http,80,Page not found,
+apim-site.noga-iso.co.il,13.107.246.40,https,443,Page not found,
+
+OPEN PORTS
+IP Address,Port,Protocol,Service,Version,State
+13.74.164.25,80,tcp,http,Microsoft HTTPAPI httpd 2.0,open
+13.74.164.25,443,tcp,https,,open
+13.107.246.40,80,tcp,http,,open
+13.107.246.40,443,tcp,https,,open
+
+VULNERABILITIES
+CVE ID,Severity,CVSS Score,Service,Port,Description
+WEB-X-FRAME-OPTIONS,LOW,3.0,Web Application,443,Clickjacking protection missing
+WEB-X-CONTENT-TYPE-OPTIONS,LOW,2.0,Web Application,443,MIME type sniffing protection missing
+WEB-X-XSS-PROTECTION,LOW,3.0,Web Application,443,XSS protection header missing
+WEB-STRICT-TRANSPORT-SECURITY,MEDIUM,4.0,Web Application,443,HSTS header missing (HTTPS only)
+WEB-CONTENT-SECURITY-POLICY,LOW,3.0,Web Application,443,CSP header missing
+WEB-X-FRAME-OPTIONS,LOW,3.0,Web Application,80,Clickjacking protection missing
+WEB-X-CONTENT-TYPE-OPTIONS,LOW,2.0,Web Application,80,MIME type sniffing protection missing
+WEB-X-XSS-PROTECTION,LOW,3.0,Web Application,80,XSS protection header missing
+WEB-CONTENT-SECURITY-POLICY,LOW,3.0,Web Application,80,CSP header missing
+WEB-HTTP-INSECURE,MEDIUM,5.0,HTTP,80,HTTP used for potentially sensitive content (consider HTTPS)

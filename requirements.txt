@@ -13,6 +13,7 @@ rich>=13.7.0
 click>=8.1.0
 python-dotenv>=1.0.0
 wafw00f>=2.2.0
+openai>=1.12.0
 bleach>=6.1.0
 markupsafe>=2.1.0
 beautifulsoup4>=4.12.0

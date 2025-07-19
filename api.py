@@ -1224,28 +1224,56 @@ async def export_scan_json(scan_id: str):
 
 @app.get("/api/export/html/{scan_id}")
 async def export_scan_html(scan_id: str):
-    """Export scan result as comprehensive HTML report"""
+    """Download the generated HTML threat analysis report"""
     try:
         if scan_id not in scan_results_store:
             raise HTTPException(status_code=404, detail="Scan result not found")
         
         result = scan_results_store[scan_id]
         
-        # Generate HTML content
-        html_content = generate_scan_html(result)
-        
-        # Save to file
-        filename = f"scan_{scan_id}_{result.lead.domain}.html"
-        file_path = Path(settings.report_dir) / filename
-        
-        with open(file_path, 'w', encoding='utf-8') as f:
-            f.write(html_content)
-        
-        return FileResponse(
-            path=file_path,
-            filename=filename,
-            media_type='text/html'
-        )
+        # Check if HTML was generated during scan
+        if hasattr(result, 'html_report_path') and result.html_report_path and Path(result.html_report_path).exists():
+            html_path = Path(result.html_report_path)
+            filename = f"threat_analysis_{result.lead.domain}_{datetime.now().strftime('%Y%m%d')}.html"
+            
+            logger.info(f"Serving HTML report for scan {scan_id}: {html_path}")
+            return FileResponse(
+                path=html_path,
+                filename=filename,
+                media_type='text/html'
+            )
+        else:
+            # Try to generate HTML on-demand if not available
+            try:
+                from modules.pdf_generator import PDFReportGenerator
+                html_generator = PDFReportGenerator()
+                
+                html_scan_data = result.dict()
+                html_path = html_generator.generate_html_report(html_scan_data, scan_id)
+                
+                if html_path and Path(html_path).exists():
+                    # Update scan result with HTML path
+                    if not hasattr(result, 'html_report_path'):
+                        # Add the field if it doesn't exist
+                        result.html_report_path = html_path
+                    else:
+                        result.html_report_path = html_path
+                    scan_results_store[scan_id] = result
+                    
+                    filename = f"threat_analysis_{result.lead.domain}_{datetime.now().strftime('%Y%m%d')}.html"
+                    
+                    logger.info(f"Generated HTML on-demand for scan {scan_id}: {html_path}")
+                    return FileResponse(
+                        path=html_path,
+                        filename=filename,
+                        media_type='text/html'
+                    )
+                else:
+                    raise HTTPException(status_code=500, detail="Failed to generate HTML report")
+                    
+            except Exception as html_error:
+                logger.error(f"On-demand HTML generation failed for {scan_id}: {html_error}")
+                raise HTTPException(status_code=500, detail="HTML report not available and generation failed")
     
     except HTTPException:
         raise
