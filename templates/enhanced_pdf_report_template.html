@@ -324,9 +324,7 @@
         <div class="section-title">Immediate Actions Required</div>
         <div class="action-list enhanced-content">
             <h4>Priority Actions</h4>
-            {% for action in priority_recommendations %}
-            <div class="action-item">{{ action }}</div>
-            {% endfor %}
+            {{ priority_recommendations }}
         </div>
     </div>
 
@@ -336,9 +334,7 @@
         <div class="recommendations enhanced-content">
             <h4>Strategic Improvements</h4>
             <ul>
-                {% for rec in general_recommendations %}
-                <li>{{ rec }}</li>
-                {% endfor %}
+                {{ general_recommendations }}
             </ul>
         </div>
     </div>
@@ -352,30 +348,14 @@
     </div>
 
     <!-- Detailed Vulnerabilities -->
-    {% if vulnerabilities %}
     <div class="section page-break">
         <div class="section-title">Detailed Vulnerability Analysis</div>
         <div class="vulnerability-list">
-            {% for vuln in vulnerabilities %}
-            <div class="vulnerability-item">
-                <div class="vuln-header">
-                    <span class="vuln-severity severity-{{ vuln.severity_lower }}">{{ vuln.severity }}</span>
-                    {{ vuln.cve_id }} - {{ vuln.title }}
-                </div>
-                <p><strong>Affected Service:</strong> {{ vuln.affected_service }} (Port {{ vuln.port }})</p>
-                <p><strong>CVSS Score:</strong> {{ vuln.cvss_score }}</p>
-                <p><strong>Description:</strong> {{ vuln.description }}</p>
-                {% if vuln.remediation %}
-                <p><strong>Remediation:</strong> {{ vuln.remediation }}</p>
-                {% endif %}
-            </div>
-            {% endfor %}
+            {{ formatted_vulnerabilities }}
         </div>
     </div>
-    {% endif %}
 
     <!-- Asset Information -->
-    {% if assets %}
     <div class="section page-break">
         <div class="section-title">Discovered Assets</div>
         <table class="stats-table">
@@ -385,17 +365,9 @@
                 <th>Port</th>
                 <th>Status</th>
             </tr>
-            {% for asset in assets %}
-            <tr>
-                <td>{{ asset.subdomain or asset.ip_address }}</td>
-                <td>{{ asset.protocol }}</td>
-                <td>{{ asset.port }}</td>
-                <td>Active</td>
-            </tr>
-            {% endfor %}
+            {{ formatted_assets }}
         </table>
     </div>
-    {% endif %}
 
     <!-- Enhanced Conclusion -->
     <div class="section">

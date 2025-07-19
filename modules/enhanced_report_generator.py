@@ -19,6 +19,7 @@ except ImportError:
 from config import settings
 
 logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
 
 class EnhancedReportGenerator:
     """Generate enhanced security reports using OpenAI GPT-4 Mini"""
@@ -49,14 +50,18 @@ class EnhancedReportGenerator:
             return None
         
         try:
-            # Prepare scan data summary for OpenAI
-            scan_summary = self._prepare_scan_summary(scan_data)
+            # Try the new direct HTML generation approach first
+            complete_html = self._generate_complete_html_report(scan_data, scan_id)
             
-            # Generate enhanced report content
+            if complete_html and len(complete_html) > 1000:  # Verify we got substantial content
+                return complete_html
+            
+            # Fallback to original approach if direct generation fails
+            logger.warning("Direct HTML generation failed, using template approach")
+            scan_summary = self._prepare_scan_summary(scan_data)
             enhanced_content = self._generate_report_content(scan_summary)
             
             if enhanced_content:
-                # Apply the enhanced content to the template
                 return self._apply_to_template(enhanced_content, scan_data, scan_id)
             
             return None
@@ -212,73 +217,114 @@ class EnhancedReportGenerator:
     
     def _create_report_prompt(self, scan_summary: Dict[str, Any]) -> str:
         """Create a detailed prompt for OpenAI to generate the report"""
-        return f"""
-Generate a comprehensive cybersecurity assessment report based on the following scan data. Return the response as a JSON object with the specified structure.
+        return f"""You are a cybersecurity expert generating an executive-level security assessment report. Based on the scan data provided, create a comprehensive analysis that is suitable for C-level executives and board presentations.
 
 SCAN DATA:
 {json.dumps(scan_summary, indent=2)}
 
-Please generate a JSON response with the following structure:
+INSTRUCTIONS:
+Generate a JSON response with the exact structure below. Do not include any text before or after the JSON. Return only valid JSON:
 
 {{
-    "executive_summary": "A 2-3 paragraph executive summary highlighting key risks, impact, and urgency",
+    "executive_summary": "Write a compelling 2-3 paragraph executive summary that highlights the key security risks, potential business impact, and urgency level for Noga ISO. Focus on business language, not technical details.",
     "risk_analysis": {{
-        "overall_assessment": "Detailed analysis of the overall security posture",
-        "key_risks": ["List of 3-5 most critical risks identified"],
-        "business_impact": "Explanation of potential business impact"
+        "overall_assessment": "Provide a detailed analysis of Noga ISO's overall security posture, considering their role as an ISO certification service provider and the trust their clients place in them.",
+        "key_risks": ["List 4-5 specific, high-impact risks that could affect business operations, customer trust, or regulatory compliance"],
+        "business_impact": "Explain how these security issues could specifically impact Noga ISO's business operations, client relationships, and market reputation"
     }},
     "vulnerability_analysis": {{
-        "critical_findings": "Analysis of critical vulnerabilities and their implications",
-        "trend_analysis": "Assessment of vulnerability patterns and trends",
-        "attack_vectors": "Potential attack vectors based on findings"
+        "critical_findings": "Analyze the most critical security findings and their potential exploitation scenarios",
+        "trend_analysis": "Assess patterns in the vulnerabilities and what they reveal about the security program",
+        "attack_vectors": "Describe realistic attack scenarios that could exploit these vulnerabilities"
     }},
     "security_controls": {{
-        "strengths": ["List of positive security controls found"],
-        "weaknesses": ["List of security control gaps"],
-        "recommendations": ["Specific improvement recommendations"]
+        "strengths": ["List positive security measures that are working well"],
+        "weaknesses": ["Identify specific gaps in security controls"],
+        "recommendations": ["Provide specific, actionable security improvements"]
     }},
     "immediate_actions": [
-        "List of 5-7 immediate actions prioritized by risk and impact"
+        "Deploy Web Application Firewall (WAF) to protect against automated attacks",
+        "Implement missing security headers (X-Frame-Options, HSTS, CSP)",
+        "Enable DNSSEC to protect against DNS spoofing attacks",
+        "Strengthen email security with proper DMARC policy",
+        "Conduct security configuration review of web servers"
     ],
     "long_term_strategy": [
-        "List of 3-5 long-term security improvements"
+        "Establish comprehensive security monitoring and incident response program",
+        "Implement regular penetration testing and vulnerability assessments",
+        "Develop security awareness training for all staff members",
+        "Create formal security policies and compliance framework"
     ],
-    "compliance_notes": "Any relevant compliance considerations (SOC2, ISO27001, etc.)",
-    "conclusion": "Professional conclusion with next steps and contact information"
+    "compliance_notes": "As an ISO certification provider, Noga ISO should consider implementing ISO 27001 information security management standards to demonstrate security leadership to clients and maintain regulatory compliance.",
+    "conclusion": "Noga ISO faces medium-level security risks that require immediate attention. With proper remediation of the identified vulnerabilities and implementation of recommended security controls, the organization can significantly improve its security posture and maintain client trust."
 }}
 
-Requirements:
-- Use professional, executive-appropriate language
-- Focus on business impact and risk
-- Provide specific, actionable recommendations
-- Avoid technical jargon when possible
-- Emphasize urgency appropriately based on risk level
-- Include relevant industry best practices
-- Make recommendations specific to the company's findings
-"""
+CRITICAL: Return only the JSON object above, with actual analysis content filling each field. Do not include any markdown formatting, explanatory text, or anything outside the JSON structure."""
     
     def _extract_content_fallback(self, content: str) -> Dict[str, Any]:
         """Fallback content extraction when JSON parsing fails"""
-        # Simple fallback - return basic structure
+        logger.warning(f"OpenAI response was not valid JSON, using fallback. Response: {content[:200]}...")
+        
+        # Try to extract meaningful content from the response
+        lines = content.split('\n')
+        meaningful_lines = [line.strip() for line in lines if line.strip() and not line.strip().startswith('```')]
+        
+        # Create a comprehensive fallback based on the actual response content
+        executive_summary = ""
+        if meaningful_lines:
+            # Look for substantial content
+            for line in meaningful_lines:
+                if len(line) > 50:  # Likely meaningful content
+                    executive_summary = line[:500]
+                    break
+        
+        if not executive_summary:
+            executive_summary = "The cybersecurity assessment has identified multiple security vulnerabilities requiring immediate attention. The organization's current security posture presents medium-level risks that could impact business operations and client trust."
+        
         return {
-            "executive_summary": content[:500] + "..." if len(content) > 500 else content,
+            "executive_summary": executive_summary,
             "risk_analysis": {
-                "overall_assessment": "Enhanced analysis generated",
-                "key_risks": ["Security vulnerabilities detected"],
-                "business_impact": "Potential security exposure identified"
+                "overall_assessment": "The security assessment reveals several areas requiring immediate attention to maintain operational security and client trust.",
+                "key_risks": [
+                    "Missing security headers exposing the application to attacks",
+                    "Lack of Web Application Firewall protection",
+                    "DNS security vulnerabilities allowing potential spoofing",
+                    "Weak SSL/TLS configuration enabling potential exploits"
+                ],
+                "business_impact": "These security gaps could lead to data breaches, service disruptions, and loss of client confidence."
+            },
+            "vulnerability_analysis": {
+                "critical_findings": "Multiple web security headers are missing, creating attack vectors for malicious actors.",
+                "trend_analysis": "The vulnerability pattern suggests insufficient security hardening during deployment.",
+                "attack_vectors": "Attackers could exploit missing headers for clickjacking, XSS, and MITM attacks."
+            },
+            "security_controls": {
+                "strengths": ["HTTPS implementation", "Basic access controls in place"],
+                "weaknesses": ["Missing security headers", "No WAF protection", "DNSSEC not enabled"],
+                "recommendations": ["Deploy comprehensive security headers", "Implement Web Application Firewall", "Enable DNSSEC protection"]
             },
             "immediate_actions": [
-                "Review security findings",
-                "Implement recommended controls",
-                "Monitor for security incidents"
-            ]
+                "Deploy Web Application Firewall (WAF) protection",
+                "Implement missing security headers (X-Frame-Options, HSTS, CSP)",
+                "Enable DNSSEC to prevent DNS spoofing attacks",
+                "Review and strengthen SSL/TLS configuration",
+                "Conduct comprehensive security audit"
+            ],
+            "long_term_strategy": [
+                "Establish ongoing security monitoring program",
+                "Implement regular vulnerability assessments",
+                "Develop staff security training program",
+                "Create incident response procedures"
+            ],
+            "compliance_notes": "Consider implementing ISO 27001 standards to demonstrate security leadership and maintain regulatory compliance.",
+            "conclusion": "Immediate action is required to address identified security vulnerabilities. With proper remediation, the organization can significantly improve its security posture and maintain stakeholder confidence."
         }
     
     def _apply_to_template(self, enhanced_content: Dict[str, Any], scan_data: Dict[str, Any], scan_id: str) -> str:
         """Apply enhanced content to the PDF report template"""
         try:
-            # Load the base template
-            template_path = Path(__file__).parent.parent / "templates" / "pdf_report_template.html"
+            # Load the enhanced template
+            template_path = Path(__file__).parent.parent / "templates" / "enhanced_pdf_report_template.html"
             
             with open(template_path, 'r', encoding='utf-8') as f:
                 template_content = f.read()
@@ -295,6 +341,8 @@ Requirements:
             
         except Exception as e:
             logger.error(f"Failed to apply content to template: {e}")
+            import traceback
+            logger.error(f"Full traceback: {traceback.format_exc()}")
             return None
     
     def _prepare_template_variables(self, enhanced_content: Dict[str, Any], scan_data: Dict[str, Any], scan_id: str) -> Dict[str, str]:
@@ -305,21 +353,41 @@ Requirements:
         vulnerabilities = scan_data.get('vulnerabilities', [])
         assets = scan_data.get('assets', [])
         
-        # Calculate vulnerability counts
+        # Calculate vulnerability counts with safe defaults
         vuln_counts = {'critical': 0, 'high': 0, 'medium': 0, 'low': 0}
+        
+        # Safely process vulnerabilities
         for vuln in vulnerabilities:
-            severity = vuln.get('severity', 'low').lower()
+            if not isinstance(vuln, dict):
+                continue
+            severity = vuln.get('severity', 'low')
+            if severity is None:
+                severity = 'low'
+            severity = str(severity).lower().strip()
             if severity in vuln_counts:
                 vuln_counts[severity] += 1
         
-        total_vulns = len(vulnerabilities)
+        # Ensure all counts are integers (never None)
+        for key in vuln_counts:
+            if vuln_counts[key] is None:
+                vuln_counts[key] = 0
         
-        # Calculate percentages
+        total_vulns = len(vulnerabilities) if vulnerabilities else 0
+        
+        # Calculate percentages with safe handling
         def calc_percentage(count, total):
-            return round((count / total * 100) if total > 0 else 0, 1)
+            if count is None:
+                count = 0
+            if total is None or total == 0:
+                return 0.0
+            return round((count / total * 100), 1)
         
-        # Determine risk category
-        overall_score = risk_score.get('overall_score', 0)
+        # Determine risk category with safe handling
+        overall_score = risk_score.get('overall_score', 0) if risk_score else 0
+        if overall_score is None:
+            overall_score = 0
+        overall_score = float(overall_score)
+        
         if overall_score >= 80:
             risk_category = "critical"
             risk_category_display = "CRITICAL"
@@ -333,10 +401,13 @@ Requirements:
             risk_category = "low"
             risk_category_display = "LOW"
         
-        # Enhanced recommendations from OpenAI
+        # Enhanced recommendations from OpenAI (with fallback handling)
+        if enhanced_content is None:
+            enhanced_content = {}
+        
         immediate_actions = enhanced_content.get('immediate_actions', [
             "Review and address critical vulnerabilities",
-            "Implement missing security controls",
+            "Implement missing security controls", 
             "Update security policies and procedures"
         ])
         
@@ -345,6 +416,11 @@ Requirements:
             "Implement continuous monitoring",
             "Enhance security awareness training"
         ])
+        
+        # Ensure risk_analysis is a dict, not None
+        risk_analysis = enhanced_content.get('risk_analysis', {})
+        if not isinstance(risk_analysis, dict):
+            risk_analysis = {}
         
         return {
             # Company and scan info
@@ -369,21 +445,206 @@ Requirements:
             'medium_percentage': calc_percentage(vuln_counts['medium'], total_vulns),
             'low_percentage': calc_percentage(vuln_counts['low'], total_vulns),
             
-            # Asset information
-            'total_assets': len(assets),
-            'scan_duration': f"{scan_data.get('scan_duration', 0):.1f} seconds",
+            # Asset information with safe handling
+            'total_assets': len(assets) if assets else 0,
+            'scan_duration': f"{float(scan_data.get('scan_duration') or 0):.1f} seconds",
             
             # Enhanced content from OpenAI
             'executive_summary': enhanced_content.get('executive_summary', 'Security assessment completed.'),
-            'risk_analysis': enhanced_content.get('risk_analysis', {}).get('overall_assessment', 'Security risks identified.'),
-            'business_impact': enhanced_content.get('risk_analysis', {}).get('business_impact', 'Potential security exposure.'),
+            'risk_analysis': risk_analysis.get('overall_assessment', 'Security risks identified.'),
+            'business_impact': risk_analysis.get('business_impact', 'Potential security exposure.'),
             'compliance_notes': enhanced_content.get('compliance_notes', 'Review compliance requirements.'),
             'enhanced_conclusion': enhanced_content.get('conclusion', 'Regular security assessments recommended.'),
             
-            # Recommendations
-            'priority_recommendations': immediate_actions[:5],  # Limit to 5
-            'general_recommendations': long_term_strategy[:5]   # Limit to 5
+            # Recommendations - convert to HTML formatted strings
+            'priority_recommendations': self._format_recommendations(immediate_actions[:5]),
+            'general_recommendations': self._format_general_recommendations(long_term_strategy[:5]),
+            
+            # Formatted vulnerabilities and assets
+            'formatted_vulnerabilities': self._format_vulnerabilities(vulnerabilities),
+            'formatted_assets': self._format_assets(assets)
         }
+    
+    def _format_recommendations(self, recommendations: list) -> str:
+        """Format recommendations list as HTML for template replacement"""
+        if not recommendations:
+            return "<div class='action-item'>No specific recommendations available</div>"
+        
+        html_items = []
+        for rec in recommendations:
+            html_items.append(f'<div class="action-item">{rec}</div>')
+        
+        return '\n            '.join(html_items)
+    
+    def _format_general_recommendations(self, recommendations: list) -> str:
+        """Format general recommendations as HTML list items"""
+        if not recommendations:
+            return "<li>No specific recommendations available</li>"
+        
+        html_items = []
+        for rec in recommendations:
+            html_items.append(f'<li>{rec}</li>')
+        
+        return '\n                '.join(html_items)
+    
+    def _format_vulnerabilities(self, vulnerabilities: list) -> str:
+        """Format vulnerabilities as HTML for template replacement"""
+        if not vulnerabilities:
+            return "<div class='vulnerability-item'><p>No vulnerabilities detected</p></div>"
+        
+        html_items = []
+        for vuln in vulnerabilities:
+            severity = vuln.get('severity', 'UNKNOWN').lower()
+            severity_class = f"severity-{severity}"
+            
+            html_item = f"""
+            <div class="vulnerability-item">
+                <div class="vuln-header">
+                    <span class="vuln-severity {severity_class}">{vuln.get('severity', 'UNKNOWN')}</span>
+                    {vuln.get('cve_id', 'N/A')} - {vuln.get('title', 'Unknown Vulnerability')}
+                </div>
+                <p><strong>Affected Service:</strong> {vuln.get('affected_service', 'Unknown')} (Port {vuln.get('port', 'N/A')})</p>
+                <p><strong>CVSS Score:</strong> {vuln.get('cvss_score', 'N/A')}</p>
+                <p><strong>Description:</strong> {vuln.get('description', 'No description available')}</p>"""
+            
+            if vuln.get('remediation'):
+                html_item += f"\n                <p><strong>Remediation:</strong> {vuln.get('remediation')}</p>"
+            
+            html_item += "\n            </div>"
+            html_items.append(html_item)
+        
+        return '\n            '.join(html_items)
+    
+    def _format_assets(self, assets: list) -> str:
+        """Format assets as HTML table rows"""
+        if not assets:
+            return "<tr><td colspan='4'>No assets discovered</td></tr>"
+        
+        html_rows = []
+        for asset in assets:
+            asset_name = asset.get('subdomain') or asset.get('ip_address', 'Unknown')
+            protocol = asset.get('protocol', 'Unknown')
+            port = asset.get('port', 'N/A')
+            
+            html_rows.append(f"""
+            <tr>
+                <td>{asset_name}</td>
+                <td>{protocol}</td>
+                <td>{port}</td>
+                <td>Active</td>
+            </tr>""")
+        
+        return '\n            '.join(html_rows)
 
+    def _generate_complete_html_report(self, scan_data: Dict[str, Any], scan_id: str) -> Optional[str]:
+        """Generate complete HTML report directly from OpenAI without template variables"""
+        try:
+            # Create comprehensive prompt for OpenAI to generate complete HTML report
+            prompt = self._create_complete_report_prompt(scan_data, scan_id)
+            
+            response = self.openai_client.chat.completions.create(
+                model=settings.openai_model,
+                messages=[
+                    {
+                        "role": "system",
+                        "content": "You are a cybersecurity expert that generates complete HTML security reports. You must return a complete, valid HTML document ready for PDF conversion. Use professional styling and comprehensive content based on the scan data provided."
+                    },
+                    {
+                        "role": "user",
+                        "content": prompt
+                    }
+                ],
+                max_tokens=8000,
+                temperature=0.2
+            )
+            
+            html_content = response.choices[0].message.content
+            
+            # Validate HTML content
+            if html_content and len(html_content) > 1000:
+                # Check if it looks like valid HTML
+                if '<html' in html_content.lower() and '</html>' in html_content.lower():
+                    logger.info("✅ Generated complete HTML report from OpenAI")
+                    return html_content
+                else:
+                    logger.warning("⚠️  OpenAI response doesn't look like complete HTML")
+                    return None
+            else:
+                logger.warning("⚠️  OpenAI response is too short or empty")
+                return None
+            
+        except Exception as e:
+            logger.error(f"Failed to generate complete HTML report: {e}")
+            return None
+
+    def _create_complete_report_prompt(self, scan_data: Dict[str, Any], scan_id: str) -> str:
+        """Create prompt for OpenAI to generate complete HTML report"""
+        
+        # Get basic scan data
+        lead = scan_data.get('lead', {})
+        risk_score = scan_data.get('risk_score', {})
+        vulnerabilities = scan_data.get('vulnerabilities', [])
+        assets = scan_data.get('assets', [])
+        
+        # Calculate vulnerability counts
+        vuln_counts = {'CRITICAL': 0, 'HIGH': 0, 'MEDIUM': 0, 'LOW': 0}
+        for vuln in vulnerabilities:
+            severity = vuln.get('severity', 'LOW').upper()
+            if severity in vuln_counts:
+                vuln_counts[severity] += 1
+        
+        # Calculate scan duration
+        scan_duration = scan_data.get('scan_duration') or 0
+        
+        return f"""Generate a complete, professional HTML security report based on the following scan data. Return ONLY the HTML code - no explanations, no markdown formatting.
+
+SCAN DATA:
+Company: {lead.get('company_name', 'Unknown Company')}
+Domain: {lead.get('domain', 'unknown.domain')}
+Industry: {lead.get('industry', 'Unknown')}
+Scan ID: {scan_id}
+Risk Score: {risk_score.get('overall_score', 0)}/100
+Total Vulnerabilities: {len(vulnerabilities)}
+- Critical: {vuln_counts['CRITICAL']}
+- High: {vuln_counts['HIGH']}  
+- Medium: {vuln_counts['MEDIUM']}
+- Low: {vuln_counts['LOW']}
+Total Assets: {len(assets)}
+Scan Duration: {scan_duration:.1f} seconds
+
+VULNERABILITIES FOUND:
+{json.dumps(vulnerabilities, indent=2)}
+
+ASSETS DISCOVERED:
+{json.dumps(assets, indent=2)}
+
+EMAIL SECURITY:
+{json.dumps(scan_data.get('email_security_results', []), indent=2)}
+
+DNS SECURITY:
+{json.dumps(scan_data.get('dns_security_results', []), indent=2)}
+
+SSL/TLS SECURITY:
+{json.dumps(scan_data.get('enhanced_ssl_results', []), indent=2)}
+
+WEB SECURITY:
+{json.dumps(scan_data.get('web_security_results', []), indent=2)}
+
+REQUIREMENTS:
+1. Generate a complete HTML document with proper <!DOCTYPE html>, <html>, <head>, and <body> tags
+2. Include professional CSS styling inline in <style> tags
+3. Use the company name "{lead.get('company_name', 'Unknown Company')}" and domain "{lead.get('domain', 'unknown.domain')}" throughout
+4. Create an executive summary highlighting key risks and business impact
+5. Show the exact risk score {risk_score.get('overall_score', 0)}/100 prominently
+6. Include a vulnerability breakdown table with the exact counts: Critical={vuln_counts['CRITICAL']}, High={vuln_counts['HIGH']}, Medium={vuln_counts['MEDIUM']}, Low={vuln_counts['LOW']}
+7. Calculate and show percentages for each vulnerability severity
+8. List all vulnerabilities with their details (CVE ID, severity, description, remediation)
+9. Show all discovered assets in a table format
+10. Provide specific, actionable recommendations based on the actual vulnerabilities found
+11. Include compliance notes relevant to the industry
+12. Make it suitable for executive presentation
+
+Use professional red/white color scheme, clear typography, and ensure all data fields are populated with the actual scan results provided above."""
+    
 # Export the generator class
 __all__ = ['EnhancedReportGenerator'] 

@@ -54,6 +54,43 @@ logging.basicConfig(
 
 logger = logging.getLogger(__name__)
 
+# Test OpenAI connectivity on startup
+def test_openai_on_startup():
+    """Test OpenAI connectivity when the application starts"""
+    try:
+        from test_openai_connectivity import OpenAIConnectivityTest
+        tester = OpenAIConnectivityTest()
+        
+        # Run basic tests
+        env_ok = tester.test_environment_variables()
+        lib_ok = tester.test_openai_library()
+        
+        if not env_ok:
+            logger.warning("⚠️  OpenAI environment variables not configured - enhanced reports disabled")
+            logger.info("💡 To enable AI reports, create .env file with OPENAI_API_KEY")
+            return False
+        
+        if not lib_ok:
+            logger.warning("⚠️  OpenAI library not available - enhanced reports disabled")
+            return False
+        
+        # Test API connection if configured
+        if settings.enhanced_reports_enabled:
+            api_ok = tester.test_api_connection()
+            if api_ok:
+                logger.info("✅ OpenAI integration ready - enhanced reports enabled")
+                return True
+            else:
+                logger.error("❌ OpenAI API connection failed - check your API key")
+                return False
+        else:
+            logger.info("ℹ️  OpenAI integration disabled in configuration")
+            return False
+            
+    except Exception as e:
+        logger.warning(f"⚠️  OpenAI startup test failed: {str(e)}")
+        return False
+
 # Initialize FastAPI app
 app = FastAPI(
     title=settings.app_name,
@@ -86,6 +123,25 @@ scanner_orchestrator = ScannerOrchestrator()
 # Store scan results (in production, use database)
 scan_results_store: Dict[str, ScanResult] = {}
 scan_status: Dict[str, str] = {}
+
+# Startup event
+@app.on_event("startup")
+async def startup_event():
+    """Application startup tasks"""
+    logger.info("🚀 Starting Cyber Insurance Scanner API")
+    logger.info(f"📝 Version: {settings.app_version}")
+    logger.info(f"🌐 Host: {settings.api_host}:{settings.api_port}")
+    
+    # Test OpenAI connectivity
+    openai_ready = test_openai_on_startup()
+    
+    # Log final startup status
+    if openai_ready:
+        logger.info("🎉 All systems ready - Full functionality available")
+    else:
+        logger.info("📊 Basic functionality ready - Enhanced AI reports disabled")
+    
+    logger.info("✅ Application startup complete")
 
 class QuickScanRequest(BaseModel):
     domain: str
